@@ -1,9 +1,9 @@
 {
   "price_series": {
-    "latest": 932.10,
-    "pct_90d": 0.084,
-    "pct_30d": -0.021,
-    "iv_30d": 0.42
+    "latest": 195.40,
+    "pct_90d": 0.072,
+    "pct_30d": -0.018,
+    "iv_30d": 0.39
   },
   "volume_anomalies": [
     { "date": "2026-04-14", "z_score": 2.8, "note": "post-earnings spike" }
@@ -14,8 +14,8 @@
       "action": "upgrade",
       "from": "overweight",
       "to": "overweight+top-pick",
-      "pt_from": 950,
-      "pt_to": 1050,
+      "pt_from": 210,
+      "pt_to": 240,
       "date": "2026-04-08"
     }
   ],

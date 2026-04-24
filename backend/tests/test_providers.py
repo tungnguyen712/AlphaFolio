@@ -31,7 +31,7 @@ from app.services.data_providers.sec_edgar import _parse_form4_xml
 
 async def test_polygon_stub_returns_nvda_fixture() -> None:
     data = await fetch_market_intel("NVDA")
-    assert data["price_series"]["latest"] == 932.10
+    assert data["price_series"]["latest"] == 195.40
     assert data["analyst_changes"][0]["firm"] == "Morgan Stanley"
     assert data["macro_context"]["fed_funds"] == 4.25
 
