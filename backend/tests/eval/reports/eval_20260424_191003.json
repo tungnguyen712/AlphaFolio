@@ -1,0 +1,41 @@
+{
+  "run_at": "2026-04-24T19:10:03.136629+00:00",
+  "tickers": [
+    "NVDA"
+  ],
+  "results": [
+    {
+      "ticker": "NVDA",
+      "status": "pass",
+      "invariants": {
+        "passed": [
+          "signals.count>=3",
+          "signals.direction_mix",
+          "devils_advocate.counterarguments>=2",
+          "devils_advocate.worst_case_substantive",
+          "synthesis.verdict_layer_well_formed",
+          "synthesis.sources_nonempty",
+          "synthesis.rationale_substantive",
+          "synthesis.position_pct_consistent"
+        ],
+        "failed": []
+      },
+      "drift_notes": [
+        "signal flipped: buy -> hold"
+      ],
+      "snapshot": {
+        "ticker": "NVDA",
+        "signal": "hold",
+        "confidence": 0.58,
+        "top_3_signals": [
+          "Q4 FY26 beat ($68.1B vs $65.9B, +35% YoY NI) validates hyperscaler AI capex, but +3.4% beat magnitude is the narrowest of the AI era \u2014 early deceleration tell.",
+          "Broad insider sell cluster (CFO Kress, EVP Field Ops Puri ~$109M, 3 directors, Principal Accounting Officer) concentrated in a 6-week window with no disclosed 10b5-1 adoption dates \u2014 breadth > typical mechanical pattern.",
+          "Morgan Stanley OW+Top Pick upgrade to $240 PT lands 6 weeks post-beat with consensus already at 36 Buys and IV30 at an elevated 39% \u2014 crowded positioning into May 20 earnings."
+        ],
+        "verdict": "HOLD \u2014 fundamentals intact but insider breadth + decelerating beat cadence argue against adding here; wait for May 20 print.",
+        "key_uncertainty": "Whether the Feb-Mar 2026 insider cluster is pre-scheduled 10b5-1 housekeeping (benign) or informed front-running of a Q1 FY27 bookings/guide slowdown \u2014 plan adoption dates are not in the bundle.",
+        "recommended_position_pct": null
+      }
+    }
+  ]
+}

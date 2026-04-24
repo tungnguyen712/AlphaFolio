@@ -1,0 +1,13 @@
+{
+  "ticker": "AMD",
+  "signal": "hold",
+  "confidence": 0.6,
+  "top_3_signals": [
+    "Q1 revenue guide of $9.5\u201310.1B implied sequential decline and triggered a 17% single-day drop, raising questions about AI accelerator share vs. Nvidia",
+    "Broad C-suite insider selling cluster (Su ~$39M, Papermaster ~$10M incl. selling into the April $255\u2013275 rally, Hu, Norrod, Grasby) \u2014 directionally bearish even after discounting for likely 10b5-1 activity",
+    "Offsetting bull case: Q4 data center beat ($5.4B vs $4.97B), +37% recovery to ~$274, and maintained sell-side Buys (UBS $310, TD Cowen $290) \u2014 but PTs sit only 6\u201313% above spot"
+  ],
+  "verdict": "HOLD into May earnings \u2014 risk/reward is balanced with asymmetric downside on a second soft guide",
+  "key_uncertainty": "Whether May earnings delivers a second consecutive soft guide (especially data center sequential <5% and MI-series gross margin compression from HBM costs) \u2014 a repeat would retroactively validate the insider cluster and break the recovery narrative",
+  "recommended_position_pct": null
+}

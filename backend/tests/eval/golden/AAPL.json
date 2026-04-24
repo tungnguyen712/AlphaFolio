@@ -1,0 +1,13 @@
+{
+  "ticker": "AAPL",
+  "signal": "hold",
+  "confidence": 0.58,
+  "top_3_signals": [
+    "Record Q1 FY26 beat ($143.8B rev +16% YoY, iPhone +23%) with strong Q2 guide (13-16% rev growth, up to 49% GM) \u2014 but stock faded -1.3% and is -5% YTD, signaling buy-side distribution into strength",
+    "Memory/NAND cost inflation at 'unprecedented rate' with 1-2 quarter COGS lag \u2014 Q2 GM guide likely the cyclical peak; real margin shock lands in Q3/Q4 FY26",
+    "April 3, 2026 Cook ($16.5M) + O'Brien ($7.7M) same-day cluster sale at $251-256 has no post-April news to contextualize; even within 10b5-1 framework, coordinated top-exec selling is informative"
+  ],
+  "verdict": "HOLD \u2014 wait for Q2 FY26 print to confirm margin trajectory before adding",
+  "key_uncertainty": "Whether the iPhone 17 cycle represents durable demand or a pull-forward/tariff-front-running artifact \u2014 Q2 sell-through and China revenue breakout will determine if FY26 consensus holds or gets cut 8-12%",
+  "recommended_position_pct": null
+}

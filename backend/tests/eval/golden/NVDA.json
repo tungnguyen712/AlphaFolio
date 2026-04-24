@@ -1,0 +1,13 @@
+{
+  "ticker": "NVDA",
+  "signal": "buy",
+  "confidence": 0.58,
+  "top_3_signals": [
+    "Q4 FY26 blowout: $68.1B revenue vs $65.9B consensus, $43B net income (+35% YoY) validates Blackwell/Rubin demand and beats back bubble fears.",
+    "Morgan Stanley upgrade to Overweight + Top Pick with PT raised $210\u2192$240 (~23% upside from $195.40) post-earnings adds high-conviction sell-side endorsement.",
+    "Broad insider cluster sells (>$150M across CFO Kress, EVP Puri, Director Stevens and others Feb\u2013Mar 2026) with zero offsetting buys \u2014 meaningful supply-side caution signal that justifies capped sizing."
+  ],
+  "verdict": "BUY NVDA, cap position at 3% of portfolio; trim into May 20 earnings if stock rallies >10% beforehand.",
+  "key_uncertainty": "Whether hyperscaler AI capex and NVDA socket share hold up through FY27 against accelerating custom-silicon programs (Google TPU, AWS Trainium, Meta MTIA, Microsoft Maia / AVGO ASIC ramp) \u2014 any hyperscaler capex guide-down or ASIC win announcement could compress forward estimates 10\u201315% and trigger a multiple de-rate.",
+  "recommended_position_pct": 0.03
+}
