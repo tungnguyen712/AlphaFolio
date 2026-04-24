@@ -1,0 +1,12 @@
+{
+  "congress_trades": [
+    {
+      "member": "Pelosi, N.",
+      "party": "D",
+      "transaction": "buy",
+      "amount_range_usd": [1000000, 5000000],
+      "filed_at": "2026-02-14",
+      "source": "quiver"
+    }
+  ]
+}
