@@ -2,12 +2,12 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey
+from sqlalchemy import Boolean, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, TimestampMixin, UUIDPKMixin
+from app.db.base import Base, TimestampMixin, UUIDPKMixin, pg_enum
 from app.models.db.enums import RebalanceTriggerKind
 
 
@@ -21,7 +21,7 @@ class RebalanceTrigger(Base, UUIDPKMixin, TimestampMixin):
         index=True,
     )
     kind: Mapped[RebalanceTriggerKind] = mapped_column(
-        Enum(RebalanceTriggerKind, name="rebalance_trigger_kind_enum"), nullable=False
+        pg_enum(RebalanceTriggerKind, name="rebalance_trigger_kind_enum"), nullable=False
     )
     condition_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     fires_at: Mapped[datetime | None] = mapped_column(

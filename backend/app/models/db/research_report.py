@@ -1,12 +1,12 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Enum, Float, ForeignKey, String
+from sqlalchemy import Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, TimestampMixin, UUIDPKMixin
+from app.db.base import Base, TimestampMixin, UUIDPKMixin, pg_enum
 from app.models.db.enums import ResearchSignal
 
 
@@ -32,7 +32,7 @@ class ResearchReport(Base, UUIDPKMixin, TimestampMixin):
     )
     ticker: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     signal: Mapped[ResearchSignal] = mapped_column(
-        Enum(ResearchSignal, name="research_signal_enum"), nullable=False
+        pg_enum(ResearchSignal, name="research_signal_enum"), nullable=False
     )
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     report_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)

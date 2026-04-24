@@ -1,11 +1,11 @@
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Numeric, String
+from sqlalchemy import ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, TimestampMixin, UUIDPKMixin
+from app.db.base import Base, TimestampMixin, UUIDPKMixin, pg_enum
 from app.models.db.enums import PendingPositionStatus
 
 
@@ -26,7 +26,7 @@ class PortfolioPositionPending(Base, UUIDPKMixin, TimestampMixin):
         nullable=True,
     )
     status: Mapped[PendingPositionStatus] = mapped_column(
-        Enum(PendingPositionStatus, name="pending_position_status_enum"),
+        pg_enum(PendingPositionStatus, name="pending_position_status_enum"),
         nullable=False,
         default=PendingPositionStatus.PENDING,
         index=True,

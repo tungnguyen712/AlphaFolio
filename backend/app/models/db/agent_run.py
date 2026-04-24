@@ -2,12 +2,12 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, UUIDPKMixin
+from app.db.base import Base, UUIDPKMixin, pg_enum
 from app.models.db.enums import AgentRunFlow, AgentRunStatus
 
 
@@ -22,10 +22,10 @@ class AgentRun(Base, UUIDPKMixin):
     )
     ticker: Mapped[str | None] = mapped_column(String(16), nullable=True, index=True)
     flow: Mapped[AgentRunFlow] = mapped_column(
-        Enum(AgentRunFlow, name="agent_run_flow_enum"), nullable=False
+        pg_enum(AgentRunFlow, name="agent_run_flow_enum"), nullable=False
     )
     status: Mapped[AgentRunStatus] = mapped_column(
-        Enum(AgentRunStatus, name="agent_run_status_enum"),
+        pg_enum(AgentRunStatus, name="agent_run_status_enum"),
         nullable=False,
         default=AgentRunStatus.QUEUED,
         index=True,

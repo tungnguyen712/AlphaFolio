@@ -1,11 +1,11 @@
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import Enum, ForeignKey, Numeric, String
+from sqlalchemy import ForeignKey, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.db.base import Base, TimestampMixin, UUIDPKMixin
+from app.db.base import Base, TimestampMixin, UUIDPKMixin, pg_enum
 from app.models.db.enums import AssetClass, RiskProfile
 
 
@@ -23,7 +23,7 @@ class Portfolio(Base, UUIDPKMixin, TimestampMixin):
         Numeric(18, 2), nullable=False, default=Decimal("0")
     )
     risk_profile: Mapped[RiskProfile] = mapped_column(
-        Enum(RiskProfile, name="risk_profile_enum"), nullable=False
+        pg_enum(RiskProfile, name="risk_profile_enum"), nullable=False
     )
 
 
@@ -40,5 +40,5 @@ class PortfolioHolding(Base, UUIDPKMixin, TimestampMixin):
     shares: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     avg_cost: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     asset_class: Mapped[AssetClass] = mapped_column(
-        Enum(AssetClass, name="asset_class_enum"), nullable=False
+        pg_enum(AssetClass, name="asset_class_enum"), nullable=False
     )
