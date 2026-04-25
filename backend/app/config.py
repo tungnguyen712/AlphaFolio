@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     clerk_publishable_key: str = ""
     clerk_jwks_url: str = ""
     clerk_issuer: str = ""
+    dev_bypass_auth: bool = False
 
     anthropic_api_key: str = ""
     anthropic_model_opus: str = "claude-opus-4-7"

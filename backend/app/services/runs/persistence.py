@@ -1,22 +1,25 @@
 """DB persistence wrappers around the research and portfolio LangGraph flows.
 
-Every call here:
-  1. Opens an `agent_runs` row (status=RUNNING, started_at=now).
-  2. Streams the graph via `astream(stream_mode="updates")` and writes one
-     `agent_run_steps` row per node completion with the node's output dict
-     (JSONB). Each step row is committed immediately — so if the process
-     dies mid-run, partial progress is preserved for replay.
-  3. On clean completion, dumps the final typed state to `graph_state`,
-     flips status to COMPLETE, sets completed_at, and writes the
-     flow-specific report row (`research_reports` for research,
-     `portfolio_recommendations` for portfolio).
-  4. On exception, flips status to FAILED, records the traceback on a
-     trailing step row, and re-raises.
+Two-phase design (split in stage 4.2):
 
-No LangGraph checkpointer for now — the dump-at-end in `graph_state` plus
-per-step outputs gives us replay without introducing a second DB driver
-(langgraph-checkpoint-postgres uses psycopg v3; our stack is asyncpg).
-Revisit once we add background job resume in stage 4.
+  enqueue_*_run(...)      -> creates the agent_runs row with status=QUEUED,
+                             returns run_id immediately. Used by the API
+                             so it can return 202 + run_id without blocking
+                             on graph execution.
+
+  execute_*_run(run_id)   -> loads the queued row, transitions to RUNNING,
+                             streams the graph (writing one agent_run_steps
+                             row per node), persists the flow-specific
+                             report, transitions to COMPLETE / FAILED.
+                             Called from a Celery worker.
+
+  run_research(...) /
+  run_portfolio(...)      -> convenience wrappers (enqueue + execute) used
+                             by direct callers (verify scripts, tests).
+                             Behavior preserved for stage-3.5 backward compat.
+
+Failure path: any exception during execute_* funnels through _fail_run,
+which marks status=FAILED and writes an `_error` step with the traceback.
 """
 from __future__ import annotations
 
@@ -26,6 +29,8 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import SessionLocal
@@ -54,9 +59,99 @@ _research_graph = build_research_graph()
 _portfolio_graph = build_portfolio_graph()
 
 
-# ---------------------------------------------------------------------------
+# ===========================================================================
 # Research flow
-# ---------------------------------------------------------------------------
+# ===========================================================================
+
+
+async def enqueue_research_run(
+    *,
+    user_id: UUID,
+    ticker: str,
+    mode: RetrievalMode = "public",
+    lookback_days: int = 90,
+    portfolio_id: UUID | None = None,
+    langsmith_trace_id: str | None = None,
+) -> UUID:
+    """Insert a QUEUED agent_runs row and return its id.
+
+    The graph itself is not invoked here — that's `execute_research_run`'s
+    job. Run-level inputs (mode, lookback_days, portfolio_id) are stashed
+    in graph_state so the worker can recover them without a separate table.
+
+    For pre_ipo mode, `ticker` is the company name string. We store the
+    display form on agent_runs.ticker; case is preserved for non-public.
+    """
+    stored_ticker = ticker.upper() if mode == "public" else ticker
+    queued_inputs = {
+        "ticker": ticker,
+        "mode": mode,
+        "lookback_days": lookback_days,
+        "portfolio_id": str(portfolio_id) if portfolio_id else None,
+    }
+    async with SessionLocal() as session:
+        run = AgentRun(
+            user_id=user_id,
+            flow=AgentRunFlow.RESEARCH,
+            ticker=stored_ticker,
+            status=AgentRunStatus.QUEUED,
+            graph_state={"_queued_inputs": queued_inputs},
+            langsmith_trace_id=langsmith_trace_id,
+        )
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
+        return run.id
+
+
+async def execute_research_run(run_id: UUID) -> SynthesisOutput:
+    """Load a queued run, execute the research graph, persist outputs.
+
+    Idempotency caveat: if called twice on the same run_id, the second call
+    will overwrite step rows and produce a second research_report row tied
+    to the same run. The Celery task layer dispatches once per run_id, so
+    in normal operation this isn't a concern.
+    """
+    async with SessionLocal() as session:
+        run = await _load_run(session, run_id)
+        queued_inputs = (run.graph_state or {}).get("_queued_inputs") or {}
+
+        run.status = AgentRunStatus.RUNNING
+        run.started_at = datetime.now(UTC)
+        await session.commit()
+
+        try:
+            initial = new_research_state(
+                ticker=queued_inputs.get("ticker") or run.ticker or "",
+                mode=queued_inputs.get("mode", "public"),
+                lookback_days=queued_inputs.get("lookback_days", 90),
+                portfolio_id=queued_inputs.get("portfolio_id"),
+            )
+            final_state = await _stream_and_persist(
+                session, _research_graph, initial, run_id
+            )
+
+            synth: SynthesisOutput = final_state["synthesis"]
+            await _finalize_run(session, run, final_state)
+
+            portfolio_id_raw = queued_inputs.get("portfolio_id")
+            report = ResearchReport(
+                user_id=run.user_id,
+                portfolio_id=UUID(portfolio_id_raw) if portfolio_id_raw else None,
+                run_id=run_id,
+                ticker=synth.ticker,
+                signal=synth.signal,
+                confidence=synth.layers.confidence,
+                report_json=synth.model_dump(mode="json"),
+            )
+            session.add(report)
+            await session.commit()
+
+            return synth
+
+        except Exception as exc:
+            await _fail_run(session, run, exc)
+            raise
 
 
 async def run_research(
@@ -68,60 +163,110 @@ async def run_research(
     portfolio_id: UUID | None = None,
     langsmith_trace_id: str | None = None,
 ) -> tuple[UUID, SynthesisOutput]:
-    """Run the research graph with full DB persistence.
+    """Convenience wrapper: enqueue + execute synchronously.
 
-    Returns (agent_run_id, synthesis_output). The research_report is also
-    persisted and can be looked up by run_id.
-
-    In `mode="pre_ipo"`, `ticker` is the company name (e.g. "Reddit"), not a
-    stock symbol. Stored as-is on agent_runs.ticker / research_reports.ticker
-    for display.
+    Used by `verify_*.py` smoke scripts and `test_run_persistence.py`. The
+    API layer never calls this — it uses `enqueue_research_run` + the Celery
+    task to keep the request-response cycle non-blocking.
     """
-    stored_ticker = ticker.upper() if mode == "public" else ticker
+    run_id = await enqueue_research_run(
+        user_id=user_id,
+        ticker=ticker,
+        mode=mode,
+        lookback_days=lookback_days,
+        portfolio_id=portfolio_id,
+        langsmith_trace_id=langsmith_trace_id,
+    )
+    synth = await execute_research_run(run_id)
+    return run_id, synth
+
+
+# ===========================================================================
+# Portfolio flow
+# ===========================================================================
+
+
+async def enqueue_portfolio_run(
+    *,
+    user_id: UUID,
+    portfolio_id: UUID,
+    holdings: list[HoldingSnapshot],
+    cash_balance: Decimal,
+    risk_profile: RiskProfile,
+    candidates: list[SynthesisOutput] | None = None,
+    objective: str | None = None,
+    langsmith_trace_id: str | None = None,
+) -> UUID:
+    """Insert a QUEUED agent_runs row for the portfolio flow.
+
+    Holdings/cash/candidates are serialized into graph_state so the worker
+    can rehydrate them. Decimals stringify via _to_jsonable.
+    """
+    queued_inputs = {
+        "portfolio_id": str(portfolio_id),
+        "holdings": [h.model_dump(mode="json") for h in holdings],
+        "cash_balance": str(cash_balance),
+        "risk_profile": risk_profile.value,
+        "candidates": [c.model_dump(mode="json") for c in (candidates or [])],
+        "objective": objective,
+    }
     async with SessionLocal() as session:
-        run = await _open_run(
-            session,
+        run = AgentRun(
             user_id=user_id,
-            flow=AgentRunFlow.RESEARCH,
-            ticker=stored_ticker,
+            flow=AgentRunFlow.PORTFOLIO,
+            ticker=None,
+            status=AgentRunStatus.QUEUED,
+            graph_state={"_queued_inputs": queued_inputs},
             langsmith_trace_id=langsmith_trace_id,
         )
-        run_id = run.id
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
+        return run.id
+
+
+async def execute_portfolio_run(run_id: UUID) -> PortfolioConstructionOutput:
+    async with SessionLocal() as session:
+        run = await _load_run(session, run_id)
+        q = (run.graph_state or {}).get("_queued_inputs") or {}
+
+        run.status = AgentRunStatus.RUNNING
+        run.started_at = datetime.now(UTC)
+        await session.commit()
 
         try:
-            initial = new_research_state(
-                ticker=ticker,
-                mode=mode,
-                lookback_days=lookback_days,
-                portfolio_id=str(portfolio_id) if portfolio_id else None,
+            holdings = [HoldingSnapshot.model_validate(h) for h in q.get("holdings", [])]
+            candidates = [
+                SynthesisOutput.model_validate(c) for c in q.get("candidates", [])
+            ]
+            initial = new_portfolio_state(
+                portfolio_id=q["portfolio_id"],
+                holdings=holdings,
+                cash_balance=Decimal(q["cash_balance"]),
+                risk_profile=RiskProfile(q["risk_profile"]),
+                candidates=candidates,
+                objective=q.get("objective"),
             )
-            final_state = await _stream_and_persist(session, _research_graph, initial, run_id)
+            final_state = await _stream_and_persist(
+                session, _portfolio_graph, initial, run_id
+            )
 
-            synth: SynthesisOutput = final_state["synthesis"]
+            rec: PortfolioConstructionOutput = final_state["recommendation"]
             await _finalize_run(session, run, final_state)
 
-            report = ResearchReport(
-                user_id=user_id,
-                portfolio_id=portfolio_id,
+            recommendation = PortfolioRecommendation(
+                portfolio_id=UUID(q["portfolio_id"]),
                 run_id=run_id,
-                ticker=synth.ticker,
-                signal=synth.signal,
-                confidence=synth.layers.confidence,
-                report_json=synth.model_dump(mode="json"),
+                recommendation_json=rec.model_dump(mode="json"),
             )
-            session.add(report)
+            session.add(recommendation)
             await session.commit()
 
-            return run_id, synth
+            return rec
 
         except Exception as exc:
             await _fail_run(session, run, exc)
             raise
-
-
-# ---------------------------------------------------------------------------
-# Portfolio flow
-# ---------------------------------------------------------------------------
 
 
 async def run_portfolio(
@@ -135,70 +280,31 @@ async def run_portfolio(
     objective: str | None = None,
     langsmith_trace_id: str | None = None,
 ) -> tuple[UUID, PortfolioConstructionOutput]:
-    """Run the portfolio graph with full DB persistence."""
-    async with SessionLocal() as session:
-        run = await _open_run(
-            session,
-            user_id=user_id,
-            flow=AgentRunFlow.PORTFOLIO,
-            ticker=None,
-            langsmith_trace_id=langsmith_trace_id,
-        )
-        run_id = run.id
-
-        try:
-            initial = new_portfolio_state(
-                portfolio_id=str(portfolio_id),
-                holdings=holdings,
-                cash_balance=cash_balance,
-                risk_profile=risk_profile,
-                candidates=candidates,
-                objective=objective,
-            )
-            final_state = await _stream_and_persist(session, _portfolio_graph, initial, run_id)
-
-            rec: PortfolioConstructionOutput = final_state["recommendation"]
-            await _finalize_run(session, run, final_state)
-
-            recommendation = PortfolioRecommendation(
-                portfolio_id=portfolio_id,
-                run_id=run_id,
-                recommendation_json=rec.model_dump(mode="json"),
-            )
-            session.add(recommendation)
-            await session.commit()
-
-            return run_id, rec
-
-        except Exception as exc:
-            await _fail_run(session, run, exc)
-            raise
-
-
-# ---------------------------------------------------------------------------
-# Internals
-# ---------------------------------------------------------------------------
-
-
-async def _open_run(
-    session: AsyncSession,
-    *,
-    user_id: UUID,
-    flow: AgentRunFlow,
-    ticker: str | None,
-    langsmith_trace_id: str | None,
-) -> AgentRun:
-    run = AgentRun(
+    """Convenience wrapper: enqueue + execute synchronously."""
+    run_id = await enqueue_portfolio_run(
         user_id=user_id,
-        flow=flow,
-        ticker=ticker,
-        status=AgentRunStatus.RUNNING,
-        started_at=datetime.now(UTC),
+        portfolio_id=portfolio_id,
+        holdings=holdings,
+        cash_balance=cash_balance,
+        risk_profile=risk_profile,
+        candidates=candidates,
+        objective=objective,
         langsmith_trace_id=langsmith_trace_id,
     )
-    session.add(run)
-    await session.commit()
-    await session.refresh(run)
+    rec = await execute_portfolio_run(run_id)
+    return run_id, rec
+
+
+# ===========================================================================
+# Internals
+# ===========================================================================
+
+
+async def _load_run(session: AsyncSession, run_id: UUID) -> AgentRun:
+    result = await session.execute(select(AgentRun).where(AgentRun.id == run_id))
+    run = result.scalar_one_or_none()
+    if run is None:
+        raise LookupError(f"agent_run {run_id} not found")
     return run
 
 
@@ -225,9 +331,9 @@ async def _stream_and_persist(
             step = AgentRunStep(
                 run_id=run_id,
                 agent_name=node_name,
-                input=None,  # stage 3.5: full input context is in graph_state
+                input=None,
                 output=_to_jsonable(node_update),
-                started_at=None,  # node-level timing is a stage-3.6 concern
+                started_at=None,
                 completed_at=step_completed_at,
             )
             session.add(step)
@@ -243,6 +349,8 @@ async def _finalize_run(
 ) -> None:
     run.status = AgentRunStatus.COMPLETE
     run.completed_at = datetime.now(UTC)
+    # Strip the _queued_inputs marker from graph_state on completion — it's
+    # bookkeeping for the worker, not part of the run's deliverable.
     run.graph_state = _to_jsonable(final_state)
     await session.commit()
 
@@ -281,8 +389,6 @@ def _to_jsonable(obj: Any) -> Any:
     via the default= path in asyncpg's JSONB encoder on write — but we
     normalize Pydantic up front so the stored blob is round-trippable.
     """
-    from pydantic import BaseModel
-
     if isinstance(obj, BaseModel):
         return obj.model_dump(mode="json")
     if isinstance(obj, dict):

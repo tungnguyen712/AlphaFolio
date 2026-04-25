@@ -1,10 +1,27 @@
 """Persistence wrappers around the LangGraph flows.
 
-API-layer and background-worker entry points should call the functions here
-rather than invoking compiled graphs directly — they guarantee every run lands
-in `agent_runs` + `agent_run_steps` and emits a domain-specific report row
-(`research_reports` / `portfolio_recommendations`) on success.
-"""
-from app.services.runs.persistence import run_portfolio, run_research
+Two-phase API:
+  - `enqueue_*_run(...)` writes the QUEUED row, returns run_id immediately.
+  - `execute_*_run(run_id)` runs the graph and transitions status.
 
-__all__ = ["run_portfolio", "run_research"]
+API endpoints call enqueue + dispatch a Celery task; the worker calls
+execute. Direct callers (tests, verify scripts) use the convenience wrappers
+`run_research` / `run_portfolio`, which call both in sequence.
+"""
+from app.services.runs.persistence import (
+    enqueue_portfolio_run,
+    enqueue_research_run,
+    execute_portfolio_run,
+    execute_research_run,
+    run_portfolio,
+    run_research,
+)
+
+__all__ = [
+    "enqueue_portfolio_run",
+    "enqueue_research_run",
+    "execute_portfolio_run",
+    "execute_research_run",
+    "run_portfolio",
+    "run_research",
+]
