@@ -6,10 +6,12 @@ narrative the Synthesis agent can quote from.
 from __future__ import annotations
 
 from app.models.agents.common import AgentModel, AnalystChange, MacroContext, NewsItem
+from app.models.agents.data_retrieval import RetrievalMode
 
 
 class MarketIntelInput(AgentModel):
     ticker: str
+    mode: RetrievalMode = "public"
     lookback_days: int = 90
 
 

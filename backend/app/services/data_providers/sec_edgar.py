@@ -5,11 +5,12 @@ headroom. Every request must carry a descriptive UA with a contact email;
 that comes from `SEC_EDGAR_USER_AGENT`.
 
 Scope (MVP): ticker→CIK resolution, recent filings index, Form 4 transaction
-parsing, and 10-K Item 1A extraction. Earnings-transcript ingestion lives in
-the embeddings path, not here.
+parsing, 10-K Item 1A extraction, and S-1 excerpt extraction for pre-IPO
+research. Earnings-transcript ingestion lives in the embeddings path, not here.
 """
 from __future__ import annotations
 
+import asyncio
 import html
 import re
 from datetime import UTC, datetime, timedelta
@@ -76,6 +77,109 @@ async def _resolve_cik(ticker: str) -> dict[str, Any]:
             return {"cik": cik, "ticker": upper, "title": row.get("title", "")}
 
     raise LookupError(f"Ticker {ticker!r} not found in SEC company_tickers master list")
+
+
+# --------------------------------------------------------------------------
+# Company-name → ticker (public companies, friendly UX)
+# --------------------------------------------------------------------------
+
+
+def _name_to_ticker_key(name: str) -> str:
+    return make_cache_key("sec.name_to_ticker", name=name.strip().upper())
+
+
+@cached_fetch(key_fn=_name_to_ticker_key, ttl_seconds=_CIK_TTL, rate_limiter=_rate_limiter)
+async def resolve_ticker_from_name(name: str) -> dict[str, Any]:
+    """Fuzzy-match a human-friendly company name to its ticker symbol.
+
+    Returns {'ticker': 'NVDA', 'cik': '0001045810', 'title': 'NVIDIA CORP'}.
+    Raises LookupError with a diagnostic message if no confident match.
+
+    Match precedence (highest first):
+      1. Case-insensitive exact match on ticker — "nvda" -> NVDA.
+      2. Case-insensitive exact match on title — "NVIDIA CORP" -> NVDA.
+      3. Title starts with the query, single candidate — "Nvidia" -> NVDA
+         (since only "NVIDIA CORP" starts with "nvidia").
+      4. Title contains the query, single candidate.
+
+    Ties at (3) or (4) raise LookupError listing the candidates so the caller
+    can be more specific. Prevents silent wrong-ticker resolution.
+    """
+    query = name.strip()
+    if not query:
+        raise LookupError("Empty company name")
+    query_upper = query.upper()
+
+    async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as client:
+        resp = await client.get(_COMPANY_TICKERS_URL)
+        resp.raise_for_status()
+        table = resp.json()
+
+    rows = list(table.values())
+
+    # 1. Exact ticker match.
+    for row in rows:
+        if str(row.get("ticker", "")).upper() == query_upper:
+            return _to_resolved(row)
+
+    # 2. Exact title match.
+    for row in rows:
+        if str(row.get("title", "")).upper() == query_upper:
+            return _to_resolved(row)
+
+    # 3. Starts-with. Prefer a single hit; shortest title wins if ambiguous.
+    starts_with = [r for r in rows if str(r.get("title", "")).upper().startswith(query_upper)]
+    if len(starts_with) == 1:
+        return _to_resolved(starts_with[0])
+    if len(starts_with) > 1:
+        # If the query IS one of the titles as a whole word (e.g. "APPLE" vs
+        # "APPLE INC", "APPLE HOSPITALITY REIT INC"), pick the shortest — the
+        # flagship company usually has the terser legal name.
+        best = min(starts_with, key=lambda r: len(str(r.get("title", ""))))
+        alt = [r for r in starts_with if r is not best]
+        # Only auto-pick when the query completes a whole word boundary in the
+        # best title (i.e. the best title starts with "<query> " or equals the
+        # query) AND the best is substantially shorter than every alternative.
+        # If all candidates share the same leading word (query is a mid-word
+        # prefix like "APPL" into "APPLE …") they are genuinely ambiguous.
+        best_title_upper = str(best.get("title", "")).upper()
+        query_ends_on_word_boundary = (
+            best_title_upper == query_upper
+            or best_title_upper.startswith(query_upper + " ")
+        )
+        if query_ends_on_word_boundary and len(best_title_upper) * 2 < min(
+            len(str(r.get("title", ""))) for r in alt
+        ):
+            return _to_resolved(best)
+        candidates = [f"{r.get('ticker')} ({r.get('title')})" for r in starts_with[:8]]
+        raise LookupError(
+            f"Company name {name!r} matches multiple tickers: {candidates}. "
+            "Pass a more specific name or the ticker directly."
+        )
+
+    # 4. Substring fallback.
+    substring = [r for r in rows if query_upper in str(r.get("title", "")).upper()]
+    if len(substring) == 1:
+        return _to_resolved(substring[0])
+    if len(substring) > 1:
+        candidates = [f"{r.get('ticker')} ({r.get('title')})" for r in substring[:8]]
+        raise LookupError(
+            f"Company name {name!r} matches multiple tickers by substring: {candidates}. "
+            "Pass a more specific name or the ticker directly."
+        )
+
+    raise LookupError(
+        f"No SEC-registered ticker found for company name {name!r}. "
+        "Check spelling or pass the ticker symbol directly."
+    )
+
+
+def _to_resolved(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ticker": str(row.get("ticker", "")).upper(),
+        "cik": str(row.get("cik_str", "")).zfill(10),
+        "title": str(row.get("title", "")),
+    }
 
 
 # --------------------------------------------------------------------------
@@ -364,3 +468,477 @@ def _extract_item_1a(raw_html: str) -> str:
     start, end = min(candidates, key=lambda c: c[0])
     end = min(end, start + 4000)
     return text[start:end].strip()[:4000]
+
+
+# --------------------------------------------------------------------------
+# S-1 lookup by company name (pre-IPO research)
+# --------------------------------------------------------------------------
+
+# EDGAR full-text search (what the new EDGAR UI uses). Returns JSON with
+# one hit per matching filing — no company-selection indirection like the
+# legacy /cgi-bin/browse-edgar?output=atom path, which returns a list of
+# matching *companies* for ambiguous name queries.
+_FTS_SEARCH_URL = "https://efts.sec.gov/LATEST/search-index"
+
+
+def _s1_search_key(company_name: str) -> str:
+    return make_cache_key("sec.s1.search", name=company_name.strip().upper())
+
+
+async def _edgar_fts_query(company_name: str, form: str) -> list[dict[str, Any]]:
+    """One EDGAR full-text search request for a single form. Caller decides
+    how to handle errors — we just raise httpx.HTTPError on any non-2xx or
+    network failure, and ValueError if the body isn't valid JSON.
+
+    Drops the surrounding quotes around the query: `q="Stripe"` (exact phrase)
+    has been observed to 500 on common names; the looser `q=Stripe` is more
+    forgiving and we'll filter false positives downstream by display_name.
+    """
+    params = {"q": company_name, "forms": form}
+    async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as client:
+        resp = await client.get(_FTS_SEARCH_URL, params=params)
+        resp.raise_for_status()
+        body = resp.json()
+    return body.get("hits", {}).get("hits", []) or []
+
+
+@cached_fetch(key_fn=_s1_search_key, ttl_seconds=_FILINGS_TTL, rate_limiter=_rate_limiter)
+async def resolve_company_by_name(company_name: str) -> dict[str, Any]:
+    """Find recent S-1 (and S-1/A) filings for a company by name.
+
+    Returns {'cik': str, 'company_title': str, 'filings': [...]} where each
+    filing has {accession, accession_nodash, form, filed_at}.
+
+    Raises LookupError if no S-1 match is found for this name OR if EDGAR's
+    FTS endpoint returns an error (treat both as "we couldn't find a filing"
+    so the pre_ipo branch's news-only fallback kicks in either way).
+
+    Ambiguity handling: EDGAR's FTS returns hits from every company whose
+    filings mention the query. We filter to hits whose `display_names`
+    contains the query (case-insensitive) — that keeps "Reddit" from pulling
+    in unrelated companies that merely referenced Reddit in an S-1.
+    """
+    # Two requests — EDGAR's FTS sometimes 500s on the combined "S-1,S-1/A"
+    # forms parameter (the slash in S-1/A trips their parser intermittently).
+    # Issuing them separately and merging is more reliable.
+    raw_hits: list[dict[str, Any]] = []
+    for form in ("S-1", "S-1/A"):
+        try:
+            raw_hits.extend(await _edgar_fts_query(company_name, form))
+        except (httpx.HTTPError, ValueError):
+            # 500/timeouts/JSON-decode failures all funnel into LookupError
+            # below if the cumulative result set is empty.
+            continue
+
+    if not raw_hits:
+        raise LookupError(
+            f"No S-1 filings found on EDGAR for company name {company_name!r}. "
+            "Pre-IPO research requires at least one S-1 on file."
+        )
+
+    query_lower = company_name.lower()
+
+    # Bucket hits by CIK, keeping only the ones whose own display_name matches
+    # the query — this drops cases where the filing mentions the company in
+    # passing but isn't filed BY that company. Dedup by accession because we
+    # query S-1 and S-1/A separately and a filing classified by EDGAR as
+    # S-1/A could legitimately appear in both result sets.
+    by_cik: dict[str, dict[str, Any]] = {}
+    seen_accessions: set[str] = set()
+    for hit in raw_hits:
+        parsed = _parse_fts_s1_hit(hit, query_lower)
+        if parsed is None:
+            continue
+        accession = parsed["filing"]["accession"]
+        if accession in seen_accessions:
+            continue
+        seen_accessions.add(accession)
+        cik = parsed["cik"]
+        bucket = by_cik.setdefault(
+            cik, {"company_title": parsed["company_title"], "filings": []}
+        )
+        bucket["filings"].append(parsed["filing"])
+
+    if not by_cik:
+        raise LookupError(
+            f"EDGAR returned S-1 hits for {company_name!r} but none filed by a "
+            "company whose name matches the query. Try a more specific name."
+        )
+
+    # Pick the CIK whose most recent filing is newest. Ties by CIK count matter
+    # less than recency — a dormant shell with 10 S-1s shouldn't beat a live
+    # filer's single recent S-1.
+    best_cik = max(
+        by_cik,
+        key=lambda c: max(
+            f.get("filed_at", "") for f in by_cik[c]["filings"]
+        ),
+    )
+    bucket = by_cik[best_cik]
+    filings = sorted(
+        bucket["filings"], key=lambda f: f.get("filed_at", ""), reverse=True
+    )
+
+    return {
+        "cik": best_cik,
+        "company_title": bucket["company_title"],
+        "filings": filings,
+    }
+
+
+def _parse_fts_s1_hit(hit: dict[str, Any], query_lower: str) -> dict[str, Any] | None:
+    source = hit.get("_source", {})
+    ciks = source.get("ciks") or []
+    display_names = source.get("display_names") or []
+    if not ciks or not display_names:
+        return None
+
+    # Require at least one display_name to contain the query — filters out
+    # "company A's S-1 that mentions company B" hits.
+    if not any(query_lower in name.lower() for name in display_names):
+        return None
+
+    cik = str(ciks[0]).zfill(10)
+    display_name = display_names[0]
+    adsh = source.get("adsh") or hit.get("_id", "")
+    if not adsh:
+        return None
+
+    return {
+        "cik": cik,
+        "company_title": display_name,
+        "filing": {
+            "form": source.get("form", "S-1").upper(),
+            "accession": adsh,
+            "accession_nodash": adsh.replace("-", ""),
+            "filed_at": source.get("file_date", ""),
+        },
+    }
+
+
+# --------------------------------------------------------------------------
+# S-1 excerpt extraction
+# --------------------------------------------------------------------------
+
+
+def _s1_excerpts_key(company_name: str) -> str:
+    return make_cache_key("sec.s1.excerpts", name=company_name.strip().upper())
+
+
+@cached_fetch(key_fn=_s1_excerpts_key, ttl_seconds=_DOCUMENT_TTL, rate_limiter=_rate_limiter)
+async def fetch_s1_excerpts(company_name: str) -> dict[str, Any]:
+    """Return {'risk_factors_excerpt', 'business_overview_excerpt',
+    'filing_url', 'filed_at', 'form'}.
+
+    Picks the most recent S-1 (or S-1/A amendment) for the company, fetches
+    the primary document from the filing's index page, and extracts the two
+    most load-bearing sections for pre-IPO research: Risk Factors and the
+    Prospectus Summary (company's business overview).
+    """
+    resolved = await resolve_company_by_name(company_name)
+    cik = resolved["cik"]
+    latest = resolved["filings"][0]
+
+    # Fetch the filing's index page to find the primary document filename.
+    primary_url = await _find_s1_primary_doc_url(cik, latest)
+    if primary_url is None:
+        return _empty_s1_excerpts()
+
+    async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+        resp = await client.get(primary_url)
+        resp.raise_for_status()
+        raw_html = resp.text
+
+    return {
+        "risk_factors_excerpt": _extract_s1_risk_factors(raw_html),
+        "business_overview_excerpt": _extract_s1_prospectus_summary(raw_html),
+        "filing_url": primary_url,
+        "filed_at": latest.get("filed_at", ""),
+        "form": latest.get("form", "S-1"),
+    }
+
+
+def _empty_s1_excerpts() -> dict[str, Any]:
+    return {
+        "risk_factors_excerpt": "",
+        "business_overview_excerpt": "",
+        "filing_url": "",
+        "filed_at": "",
+        "form": "",
+    }
+
+
+async def _find_s1_primary_doc_url(cik: str, filing: dict[str, Any]) -> str | None:
+    """Read the filing's index JSON to find the primary .htm document."""
+    cik_int = int(cik)
+    index_json_url = (
+        f"{_BASE_WWW}/Archives/edgar/data/{cik_int}/"
+        f"{filing['accession_nodash']}/index.json"
+    )
+    async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as client:
+        try:
+            resp = await client.get(index_json_url)
+            resp.raise_for_status()
+            body = resp.json()
+        except httpx.HTTPError:
+            return None
+
+    items = body.get("directory", {}).get("item", [])
+    # Heuristic: primary S-1 doc is the largest .htm without "exhibit" in the name.
+    candidates = [
+        it
+        for it in items
+        if it.get("name", "").endswith(".htm") and "exhibit" not in it.get("name", "").lower()
+    ]
+    if not candidates:
+        return None
+    primary = max(candidates, key=lambda it: int(it.get("size", 0) or 0))
+    return (
+        f"{_BASE_WWW}/Archives/edgar/data/{cik_int}/"
+        f"{filing['accession_nodash']}/{primary['name']}"
+    )
+
+
+# --- S-1 section extraction -------------------------------------------------
+
+# S-1 Risk Factors header: usually just "Risk Factors" (all caps or title case),
+# sometimes preceded by "RISK FACTORS" as a standalone section. Distinct from
+# 10-K which uses "Item 1A. Risk Factors".
+_S1_RISK_FACTORS_HEADER_RE = re.compile(
+    r"(?<!\w)(?:RISK\s+FACTORS)(?!\w)", re.IGNORECASE
+)
+# After Risk Factors an S-1 typically continues with "Use of Proceeds" or
+# "Special Note Regarding Forward-Looking Statements" etc. — we terminate on
+# the first plausible next section header.
+_S1_RISK_FACTORS_END_RE = re.compile(
+    r"(?<!\w)(?:USE\s+OF\s+PROCEEDS|SPECIAL\s+NOTE|CAUTIONARY\s+STATEMENT|"
+    r"DIVIDEND\s+POLICY|CAPITALIZATION)(?!\w)",
+    re.IGNORECASE,
+)
+
+_S1_SUMMARY_HEADER_RE = re.compile(
+    r"(?<!\w)(?:PROSPECTUS\s+SUMMARY|SUMMARY(?:\s+OF\s+THE\s+PROSPECTUS)?)(?!\w)",
+    re.IGNORECASE,
+)
+_S1_SUMMARY_END_RE = re.compile(
+    r"(?<!\w)(?:(?:THE\s+)?OFFERING|RISK\s+FACTORS|SPECIAL\s+NOTE)(?!\w)",
+    re.IGNORECASE,
+)
+
+
+def _extract_s1_risk_factors(raw_html: str) -> str:
+    text = _strip_html(raw_html)
+    return _find_section(text, _S1_RISK_FACTORS_HEADER_RE, _S1_RISK_FACTORS_END_RE, max_chars=4000)
+
+
+def _extract_s1_prospectus_summary(raw_html: str) -> str:
+    text = _strip_html(raw_html)
+    # Prospectus summary is shorter than risk factors; cap lower.
+    return _find_section(text, _S1_SUMMARY_HEADER_RE, _S1_SUMMARY_END_RE, max_chars=2500)
+
+
+def _strip_html(raw_html: str) -> str:
+    text = _TAG_RE.sub(" ", raw_html)
+    text = html.unescape(text)
+    return _WHITESPACE_RE.sub(" ", text).strip()
+
+
+def _find_section(
+    text: str,
+    start_re: re.Pattern[str],
+    end_re: re.Pattern[str],
+    *,
+    max_chars: int,
+) -> str:
+    """Find the section body whose header matches `start_re` and ends before
+    `end_re`. Applies the same ToC-vs-body heuristic as `_extract_item_1a`:
+    a real section has a substantial gap to the next header.
+    """
+    starts = [m.end() for m in start_re.finditer(text)]
+    if not starts:
+        return ""
+    ends = [m.start() for m in end_re.finditer(text)]
+
+    candidates: list[tuple[int, int]] = []
+    for s in starts:
+        following_end = next((e for e in ends if e > s), None)
+        if following_end is None or (following_end - s) < 2000:
+            # Likely a ToC entry — real sections have >2k chars of body.
+            continue
+        candidates.append((s, following_end))
+
+    if not candidates:
+        # Relax: accept any start with an end after it.
+        for s in starts:
+            following_end = next((e for e in ends if e > s), None)
+            if following_end is not None:
+                candidates.append((s, following_end))
+    if not candidates:
+        return ""
+
+    start, end = min(candidates, key=lambda c: c[0])
+    end = min(end, start + max_chars)
+    return text[start:end].strip()[:max_chars]
+
+
+# --------------------------------------------------------------------------
+# Form D (private offering) — funding-round size for private companies
+# --------------------------------------------------------------------------
+
+
+def _form_d_search_key(company_name: str) -> str:
+    return make_cache_key("sec.formd.search", name=company_name.strip().upper())
+
+
+@cached_fetch(key_fn=_form_d_search_key, ttl_seconds=_FILINGS_TTL, rate_limiter=_rate_limiter)
+async def fetch_form_d_filings(
+    company_name: str, *, max_filings: int = 5
+) -> dict[str, Any]:
+    """Return {'filings': [<form_d_dict>, ...]} — Form D notices for the company.
+
+    Form D is a notice of unregistered securities sale; private companies file
+    one for each funding round (Series A/B/C/etc.). Each parsed entry has:
+      issuer_name, accession, filed_at, date_of_first_sale,
+      total_offering_amount_usd, total_amount_sold_usd, source_url.
+
+    Returns empty list if no Form D filings found or if EDGAR errors — silent
+    fallback because Form D is supplementary data, not load-bearing.
+    """
+    try:
+        raw_hits = await _edgar_fts_query(company_name, "D")
+    except (httpx.HTTPError, ValueError):
+        return {"filings": []}
+
+    if not raw_hits:
+        return {"filings": []}
+
+    query_lower = company_name.lower()
+    metas: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for hit in raw_hits:
+        parsed = _parse_form_d_hit(hit, query_lower)
+        if parsed is None:
+            continue
+        if parsed["accession"] in seen:
+            continue
+        seen.add(parsed["accession"])
+        metas.append(parsed)
+        if len(metas) >= max_filings:
+            break
+
+    # Fetch + parse the XML primary doc for each filing in parallel.
+    parsed_filings = await asyncio.gather(
+        *[_fetch_and_parse_form_d_xml(m) for m in metas], return_exceptions=True
+    )
+    out: list[dict[str, Any]] = []
+    for filing in parsed_filings:
+        if isinstance(filing, BaseException) or filing is None:
+            continue
+        out.append(filing)
+
+    out.sort(key=lambda f: f.get("filed_at") or "", reverse=True)
+    return {"filings": out}
+
+
+def _parse_form_d_hit(hit: dict[str, Any], query_lower: str) -> dict[str, Any] | None:
+    source = hit.get("_source", {})
+    ciks = source.get("ciks") or []
+    display_names = source.get("display_names") or []
+    if not ciks or not display_names:
+        return None
+    if not any(query_lower in name.lower() for name in display_names):
+        return None
+
+    adsh = source.get("adsh") or hit.get("_id", "")
+    if not adsh:
+        return None
+
+    return {
+        "issuer_name": display_names[0],
+        "cik": str(ciks[0]).zfill(10),
+        "accession": adsh,
+        "accession_nodash": adsh.replace("-", ""),
+        "filed_at": source.get("file_date", ""),
+    }
+
+
+# Form D XML uses an SEC-specific namespace; tags vary slightly by version.
+# We do a tag-suffix search (.//*[localname]) by stripping the namespace from
+# each element rather than declaring the exact ns map (which has changed
+# across schema versions).
+_FORM_D_OFFERING_AMT_TAGS = ("totalOfferingAmount",)
+_FORM_D_SOLD_AMT_TAGS = ("totalAmountSold",)
+_FORM_D_FIRST_SALE_TAGS = ("dateOfFirstSale",)
+
+
+async def _fetch_and_parse_form_d_xml(meta: dict[str, Any]) -> dict[str, Any] | None:
+    """Locate the Form D primary XML, parse the dollar amounts and dates."""
+    cik_int = int(meta["cik"])
+    index_json_url = (
+        f"{_BASE_WWW}/Archives/edgar/data/{cik_int}/"
+        f"{meta['accession_nodash']}/index.json"
+    )
+    async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as client:
+        try:
+            resp = await client.get(index_json_url)
+            resp.raise_for_status()
+            body = resp.json()
+        except httpx.HTTPError:
+            return None
+
+        items = body.get("directory", {}).get("item", [])
+        # Form D primary doc is named primary_doc.xml (or sometimes the
+        # form-d.xml legacy name).
+        xml_name = next(
+            (
+                it["name"]
+                for it in items
+                if it.get("name", "").lower() in ("primary_doc.xml", "form-d.xml")
+            ),
+            None,
+        )
+        if xml_name is None:
+            return None
+
+        xml_url = (
+            f"{_BASE_WWW}/Archives/edgar/data/{cik_int}/"
+            f"{meta['accession_nodash']}/{xml_name}"
+        )
+        try:
+            xml_resp = await client.get(xml_url)
+            xml_resp.raise_for_status()
+            xml_text = xml_resp.text
+        except httpx.HTTPError:
+            return None
+
+    return _parse_form_d_xml(xml_text, meta, source_url=xml_url)
+
+
+def _parse_form_d_xml(
+    xml_text: str, meta: dict[str, Any], *, source_url: str
+) -> dict[str, Any] | None:
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError:
+        return None
+
+    def _find_first(tag_names: tuple[str, ...]) -> str | None:
+        for el in root.iter():
+            local = el.tag.rsplit("}", 1)[-1]
+            if local in tag_names and el.text:
+                stripped = el.text.strip()
+                # Form D issuers occasionally leave date/amount fields blank
+                # — collapse "" to None so Pydantic doesn't reject the row.
+                if stripped:
+                    return stripped
+        return None
+
+    return {
+        "issuer_name": meta["issuer_name"],
+        "accession": meta["accession"],
+        "filed_at": meta.get("filed_at") or None,
+        "date_of_first_sale": _find_first(_FORM_D_FIRST_SALE_TAGS),
+        "total_offering_amount_usd": _as_float(_find_first(_FORM_D_OFFERING_AMT_TAGS)),
+        "total_amount_sold_usd": _as_float(_find_first(_FORM_D_SOLD_AMT_TAGS)),
+        "source_url": source_url,
+    }

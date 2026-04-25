@@ -59,6 +59,32 @@ class CongressTrade(AgentModel):
     source: str | None = None
 
 
+class FormDFiling(AgentModel):
+    """Form D = notice of unregistered private securities sale. The most
+    information-dense public source for funding-round size on private
+    companies — issuer reports total offering amount + amount sold to date.
+    Most useful for pre-IPO research; usually empty for established public
+    companies (which don't sell unregistered securities to the same degree).
+    """
+
+    issuer_name: str
+    accession: str
+    filed_at: date | None = None
+    date_of_first_sale: date | None = None
+    total_offering_amount_usd: float | None = None
+    total_amount_sold_usd: float | None = None
+    source_url: HttpUrl | None = None
+
+    @field_validator("filed_at", "date_of_first_sale", mode="before")
+    @classmethod
+    def _coerce_blank_date(cls, value: Any) -> Any:
+        """Form D issuers sometimes file with blank date fields. Treat any
+        empty/whitespace-only string as None so we don't reject the whole row."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+
 class PriceSummary(AgentModel):
     """Point-in-time price summary from the Polygon stub.
 

@@ -34,6 +34,7 @@ from app.graphs.research import build_research_graph, new_research_state
 from app.models.agents import (
     HoldingSnapshot,
     PortfolioConstructionOutput,
+    RetrievalMode,
     SynthesisOutput,
 )
 from app.models.db import (
@@ -62,6 +63,7 @@ async def run_research(
     *,
     user_id: UUID,
     ticker: str,
+    mode: RetrievalMode = "public",
     lookback_days: int = 90,
     portfolio_id: UUID | None = None,
     langsmith_trace_id: str | None = None,
@@ -70,13 +72,18 @@ async def run_research(
 
     Returns (agent_run_id, synthesis_output). The research_report is also
     persisted and can be looked up by run_id.
+
+    In `mode="pre_ipo"`, `ticker` is the company name (e.g. "Reddit"), not a
+    stock symbol. Stored as-is on agent_runs.ticker / research_reports.ticker
+    for display.
     """
+    stored_ticker = ticker.upper() if mode == "public" else ticker
     async with SessionLocal() as session:
         run = await _open_run(
             session,
             user_id=user_id,
             flow=AgentRunFlow.RESEARCH,
-            ticker=ticker.upper(),
+            ticker=stored_ticker,
             langsmith_trace_id=langsmith_trace_id,
         )
         run_id = run.id
@@ -84,6 +91,7 @@ async def run_research(
         try:
             initial = new_research_state(
                 ticker=ticker,
+                mode=mode,
                 lookback_days=lookback_days,
                 portfolio_id=str(portfolio_id) if portfolio_id else None,
             )

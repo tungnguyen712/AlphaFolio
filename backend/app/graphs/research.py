@@ -24,6 +24,7 @@ from app.models.agents import (
     DevilsAdvocateOutput,
     MarketIntelInput,
     MarketIntelOutput,
+    RetrievalMode,
     SignalAnalysisInput,
     SignalAnalysisOutput,
     SynthesisInput,
@@ -41,6 +42,7 @@ from app.services.agents import (
 class ResearchState(TypedDict, total=False):
     # Inputs (set by the caller via new_research_state).
     ticker: str
+    mode: RetrievalMode
     lookback_days: int
     portfolio_id: str | None
 
@@ -53,15 +55,25 @@ class ResearchState(TypedDict, total=False):
 
 
 def new_research_state(
-    *, ticker: str, lookback_days: int = 90, portfolio_id: str | None = None
+    *,
+    ticker: str,
+    mode: RetrievalMode = "public",
+    lookback_days: int = 90,
+    portfolio_id: str | None = None,
 ) -> ResearchState:
     """Build the initial state for a research run.
 
     Centralized so the API layer (stage 4) and tests have a single way to
     kick off a graph — no bare dict literals scattered around.
+
+    For `mode="pre_ipo"`, `ticker` carries the company name (e.g. "Reddit") —
+    do NOT uppercase it since EDGAR's company search is case-insensitive but
+    we want the stored display string to read naturally.
     """
+    stored_ticker = ticker.upper() if mode == "public" else ticker
     return ResearchState(
-        ticker=ticker.upper(),
+        ticker=stored_ticker,
+        mode=mode,
         lookback_days=lookback_days,
         portfolio_id=portfolio_id,
     )
@@ -76,6 +88,7 @@ async def _data_retrieval_node(state: ResearchState) -> dict:
     out = await data_retrieval.run(
         DataRetrievalInput(
             ticker=state["ticker"],
+            mode=state.get("mode", "public"),
             lookback_days=state.get("lookback_days", 90),
         )
     )
@@ -86,6 +99,7 @@ async def _market_intel_node(state: ResearchState) -> dict:
     out = await market_intel.run(
         MarketIntelInput(
             ticker=state["ticker"],
+            mode=state.get("mode", "public"),
             lookback_days=state.get("lookback_days", 90),
         )
     )

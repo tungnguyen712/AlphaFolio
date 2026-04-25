@@ -42,7 +42,9 @@ class _NarrativeOnly(BaseModel):
 
 async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
     ticker = inputs.ticker
-    news_bundle = await tavily.fetch_news(ticker, lookback_days=inputs.lookback_days)
+    news_bundle = await tavily.fetch_news(
+        ticker, lookback_days=inputs.lookback_days, mode=inputs.mode
+    )
     polygon_bundle = await _safe_polygon(ticker)
 
     news_items = [NewsItem.model_validate(n) for n in news_bundle.get("news_items", [])]
