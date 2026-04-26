@@ -24,6 +24,7 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
 
   const [objective, setObjective] = useState("");
   const [selectedReportIds, setSelectedReportIds] = useState<string[]>([]);
+  const [navigating, setNavigating] = useState(false);
 
   const portfolioRuns = runs.filter((r) => r.recommendation !== null || r.flow === "portfolio");
 
@@ -34,6 +35,7 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
       objective: objective.trim() || undefined,
     });
     if (result) {
+      setNavigating(true);
       router.push(`/portfolios/${params.id}/runs/${result.run_id}`);
     }
   };
@@ -95,11 +97,11 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
 
         <button
           type="submit"
-          disabled={starting}
+          disabled={starting || navigating}
           className="mt-4 flex items-center gap-2 rounded-md bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
         >
-          {starting && <Spinner size="sm" />}
-          Start rebalance analysis
+          {(starting || navigating) && <Spinner size="sm" />}
+          {navigating ? "Starting…" : "Start rebalance analysis"}
         </button>
       </form>
 

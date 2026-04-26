@@ -28,6 +28,7 @@ function ResearchForm() {
   const [ticker, setTicker] = useState(searchParams.get("ticker") ?? "");
   const [mode, setMode] = useState<"public" | "pre_ipo">("public");
   const [lookback, setLookback] = useState("90");
+  const [navigating, setNavigating] = useState(false);
   const { mutate, loading, error } = useStartResearchRun();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,7 +39,10 @@ function ResearchForm() {
       mode,
       lookback_days: parseInt(lookback, 10),
     });
-    if (result) router.push(`/research/runs/${result.run_id}`);
+    if (result) {
+      setNavigating(true);
+      router.push(`/research/runs/${result.run_id}`);
+    }
   };
 
   return (
@@ -89,11 +93,11 @@ function ResearchForm() {
 
       <button
         type="submit"
-        disabled={loading}
+        disabled={loading || navigating}
         className="mt-4 flex items-center gap-2 rounded-md bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
       >
-        {loading && <Spinner size="sm" />}
-        Start research
+        {(loading || navigating) && <Spinner size="sm" />}
+        {navigating ? "Starting…" : "Start research"}
       </button>
     </form>
   );

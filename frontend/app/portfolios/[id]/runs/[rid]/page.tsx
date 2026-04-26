@@ -1,35 +1,30 @@
 "use client";
 
-import { useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { RunProgressPanel } from "@/components/ui/RunProgressPanel";
 import { useRun } from "@/hooks/useRuns";
+import { RunProgressPanel } from "@/components/ui/RunProgressPanel";
 import { VerdictCard } from "@/components/ui/VerdictCard";
 import { Spinner } from "@/components/ui/Spinner";
-import type { RunStatusOut } from "@/lib/types";
 
 export default function PortfolioRunPage({
   params,
 }: {
   params: { id: string; rid: string };
 }) {
-  const router = useRouter();
   const { data: run, loading } = useRun(params.rid);
 
-  const handleComplete = useCallback(
-    (_run: RunStatusOut) => {
-      // Re-render will pick up the completed state via useRun polling
-      void router.replace(`/portfolios/${params.id}/runs/${params.rid}`);
-    },
-    [params.id, params.rid, router],
-  );
-
-  if (loading && !run) return <Spinner />;
+  if (loading && !run) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 py-24">
+        <Spinner />
+        <p className="text-sm text-neutral-500">Loading run…</p>
+      </div>
+    );
+  }
 
   // If run is complete and has a recommendation, show results inline
   if (run?.status === "complete" && run.recommendation) {
     return (
-      <div className="max-w-2xl space-y-6">
+      <div className="space-y-6">
         <h3 className="text-base font-semibold text-neutral-800">Portfolio analysis complete</h3>
 
         <VerdictCard layers={run.recommendation.layers} />
@@ -46,6 +41,7 @@ export default function PortfolioRunPage({
             <div className="border-b border-neutral-100 px-6 py-4">
               <h4 className="text-sm font-semibold text-neutral-800">Proposed trades</h4>
             </div>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-100 text-xs text-neutral-500">
@@ -78,13 +74,14 @@ export default function PortfolioRunPage({
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
         {Object.keys(run.recommendation.target_allocations).length > 0 && (
           <div className="rounded-xl border border-neutral-200 bg-white p-6">
             <h4 className="mb-3 text-sm font-semibold text-neutral-700">Target allocations</h4>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {Object.entries(run.recommendation.target_allocations).map(([ticker, pct]) => (
                 <div key={ticker} className="flex items-center justify-between rounded bg-neutral-50 px-3 py-2">
                   <span className="text-sm font-semibold text-neutral-800">{ticker}</span>
@@ -99,9 +96,9 @@ export default function PortfolioRunPage({
   }
 
   return (
-    <div className="max-w-2xl">
+    <div>
       <h3 className="mb-4 text-base font-semibold text-neutral-800">Portfolio analysis in progress</h3>
-      <RunProgressPanel runId={params.rid} onComplete={handleComplete} />
+      <RunProgressPanel runId={params.rid} />
     </div>
   );
 }
