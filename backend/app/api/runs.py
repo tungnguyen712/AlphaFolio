@@ -1,4 +1,4 @@
-"""Run kickoff and status endpoints.
+"""Run kickoff, status, and SSE streaming endpoints.
 
 POST endpoints enqueue a row, dispatch a Celery task, and return 202
 immediately. GET endpoints read from agent_runs and (when the run is
@@ -8,6 +8,7 @@ Routes intentionally span two URL prefixes:
   POST /research/runs            (start a research run)
   POST /portfolios/{id}/runs     (start a portfolio run, owned by a portfolio)
   GET  /runs/{run_id}            (status of any run)
+  GET  /runs/{run_id}/stream     (SSE — live step events via Redis pub/sub)
   GET  /runs/{run_id}/steps
   GET  /runs                     (recent runs, paginated)
 
@@ -16,10 +17,15 @@ includes them both.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from decimal import Decimal
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 
 from app.api.deps import CurrentUserDep, DBSessionDep
@@ -31,6 +37,7 @@ from app.api.schemas.runs import (
     RunStatusOut,
     RunStepOut,
 )
+from app.db.session import SessionLocal
 from app.models.agents import HoldingSnapshot, SynthesisOutput
 from app.models.db import (
     AgentRun,
@@ -41,6 +48,7 @@ from app.models.db import (
     PortfolioRecommendation,
     ResearchReport,
 )
+from app.services.redis_client import get_redis, run_event_channel
 from app.services.runs import enqueue_portfolio_run, enqueue_research_run
 from app.workers.tasks import run_portfolio_task, run_research_task
 
@@ -222,6 +230,134 @@ async def get_run_steps(
         )
     ).scalars().all()
     return list(rows)
+
+
+@runs_router.get("/runs/{run_id}/stream")
+async def stream_run_events(
+    run_id: UUID,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> StreamingResponse:
+    """SSE stream of agent-step events for a run.
+
+    Emits `step` events as each agent node completes, a `status` event when
+    the run transitions to RUNNING, and a terminal `done` event on completion
+    or failure. Clients should close the connection after receiving `done`.
+
+    Connects to an already-finished run replay all steps from DB immediately
+    and sends `done` without waiting on Redis.
+    """
+    # Ownership check must happen HERE, before the StreamingResponse is
+    # returned. HTTPException raised inside an async generator fires after
+    # headers are already committed (Starlette sends 200 before iterating the
+    # body), so a 404 inside the generator can't reach the client correctly.
+    run = await _load_owned_run(db, run_id, user.id)
+    return StreamingResponse(
+        _run_event_generator(run_id, run.status),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+async def _run_event_generator(
+    run_id: UUID, run_status: AgentRunStatus
+) -> AsyncIterator[bytes]:
+    def sse(payload: dict[str, Any]) -> bytes:
+        return f"data: {json.dumps(payload)}\n\n".encode()
+
+    # Terminal path: replay DB steps then close immediately.
+    if run_status in (AgentRunStatus.COMPLETE, AgentRunStatus.FAILED):
+        async with SessionLocal() as db:
+            rows = (
+                await db.execute(
+                    select(AgentRunStep)
+                    .where(AgentRunStep.run_id == run_id)
+                    .order_by(AgentRunStep.completed_at.nulls_last())
+                )
+            ).scalars().all()
+        error_text: str | None = None
+        for r in rows:
+            if r.agent_name == "_error":
+                error_text = r.error
+            else:
+                yield sse({
+                    "type": "step",
+                    "agent_name": r.agent_name,
+                    "output": r.output,
+                    "error": r.error,
+                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                })
+        yield sse({
+            "type": "done",
+            "status": run_status.value,
+            "error": error_text if run_status == AgentRunStatus.FAILED else None,
+        })
+        return
+
+    # Live path: subscribe first so we don't miss events, then catch up from DB.
+    redis = get_redis()
+    channel = run_event_channel(run_id)
+    async with redis.pubsub() as pubsub:
+        await pubsub.subscribe(channel)
+
+        async with SessionLocal() as db:
+            rows = (
+                await db.execute(
+                    select(AgentRunStep)
+                    .where(AgentRunStep.run_id == run_id)
+                    .order_by(AgentRunStep.completed_at.nulls_last())
+                )
+            ).scalars().all()
+            # Re-check status in the same session — run may have completed
+            # between the ownership check and the subscription.
+            fresh_run = (
+                await db.execute(
+                    select(AgentRun).where(AgentRun.id == run_id)
+                )
+            ).scalar_one()
+            current_status = fresh_run.status
+
+        seen: set[tuple[str, str | None]] = set()
+        for r in rows:
+            if r.agent_name != "_error":
+                key = (r.agent_name, r.completed_at.isoformat() if r.completed_at else None)
+                seen.add(key)
+                yield sse({
+                    "type": "step",
+                    "agent_name": r.agent_name,
+                    "output": r.output,
+                    "error": r.error,
+                    "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                })
+
+        # If run completed while we were setting up, emit done and return.
+        if current_status in (AgentRunStatus.COMPLETE, AgentRunStatus.FAILED):
+            yield sse({"type": "done", "status": current_status.value})
+            return
+
+        # Stream live events from Redis.
+        deadline = asyncio.get_event_loop().time() + 600  # 10 min max
+        async for message in pubsub.listen():
+            if message["type"] != "message":
+                continue
+            payload = json.loads(message["data"])
+
+            # Deduplicate steps already replayed from DB.
+            if payload.get("type") == "step":
+                key = (
+                    payload.get("agent_name", ""),
+                    payload.get("completed_at"),
+                )
+                if key in seen:
+                    continue
+                seen.add(key)
+
+            yield sse(payload)
+            if payload.get("type") == "done":
+                return
+            if asyncio.get_event_loop().time() > deadline:
+                yield sse({"type": "done", "status": "failed", "error": "stream timeout"})
+                return
 
 
 @runs_router.get("/runs", response_model=list[RunStatusOut])

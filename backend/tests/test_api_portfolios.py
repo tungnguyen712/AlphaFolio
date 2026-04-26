@@ -12,12 +12,20 @@ from decimal import Decimal
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import delete
+from sqlalchemy import delete, select
 
 from app.auth.clerk import get_current_user
 from app.db.session import SessionLocal
 from app.main import app
-from app.models.db import User
+from app.models.db import (
+    PendingPositionStatus,
+    Portfolio,
+    PortfolioHolding,
+    PortfolioPositionPending,
+    RebalanceTrigger,
+    User,
+)
+from app.models.db.enums import AssetClass, RebalanceTriggerKind, RiskProfile
 
 
 @pytest_asyncio.fixture
@@ -197,3 +205,201 @@ async def test_health(client: AsyncClient):
 
 # Silence unused-fixture warnings — fixture is consumed via Depends override.
 _ = pytest
+
+
+# ---------------------------------------------------------------------------
+# Pending positions
+# ---------------------------------------------------------------------------
+
+
+async def _seed_portfolio(user: User, name: str = "TestPF") -> Portfolio:
+    async with SessionLocal() as session:
+        pf = Portfolio(
+            user_id=user.id,
+            name=name,
+            cash_balance=Decimal("10000"),
+            risk_profile=RiskProfile.MODERATE,
+        )
+        session.add(pf)
+        await session.commit()
+        await session.refresh(pf)
+        return pf
+
+
+async def test_list_pending_positions_returns_only_pending_by_default(
+    client: AsyncClient, test_user: User
+):
+    pf = await _seed_portfolio(test_user)
+
+    async with SessionLocal() as session:
+        session.add(
+            PortfolioPositionPending(
+                portfolio_id=pf.id,
+                ticker="NVDA",
+                target_pct=Decimal("0.05"),
+                status=PendingPositionStatus.PENDING,
+            )
+        )
+        session.add(
+            PortfolioPositionPending(
+                portfolio_id=pf.id,
+                ticker="AAPL",
+                target_pct=Decimal("0.03"),
+                status=PendingPositionStatus.REJECTED,
+            )
+        )
+        await session.commit()
+
+    resp = await client.get(f"/portfolios/{pf.id}/pending")
+    assert resp.status_code == 200
+    rows = resp.json()
+    assert len(rows) == 1
+    assert rows[0]["ticker"] == "NVDA"
+
+    # include_resolved shows both
+    resp_all = await client.get(
+        f"/portfolios/{pf.id}/pending", params={"include_resolved": "true"}
+    )
+    assert len(resp_all.json()) == 2
+
+
+async def test_accept_pending_position_creates_holding(
+    client: AsyncClient, test_user: User
+):
+    pf = await _seed_portfolio(test_user)
+
+    async with SessionLocal() as session:
+        pending = PortfolioPositionPending(
+            portfolio_id=pf.id,
+            ticker="MSFT",
+            target_pct=Decimal("0.10"),
+            status=PendingPositionStatus.PENDING,
+        )
+        session.add(pending)
+        await session.commit()
+        await session.refresh(pending)
+        pending_id = pending.id
+
+    resp = await client.post(
+        f"/portfolios/{pf.id}/pending/{pending_id}/accept",
+        json={"shares": "15", "avg_cost": "420.00", "asset_class": "established"},
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["ticker"] == "MSFT"
+    assert Decimal(body["shares"]) == Decimal("15")
+
+    # Pending row should now be ACCEPTED
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(
+                select(PortfolioPositionPending).where(
+                    PortfolioPositionPending.id == pending_id
+                )
+            )
+        ).scalar_one()
+        assert row.status == PendingPositionStatus.ACCEPTED
+
+    # Holding should be in the portfolio
+    pf_resp = await client.get(f"/portfolios/{pf.id}")
+    tickers = [h["ticker"] for h in pf_resp.json()["holdings"]]
+    assert "MSFT" in tickers
+
+
+async def test_reject_pending_position(client: AsyncClient, test_user: User):
+    pf = await _seed_portfolio(test_user)
+
+    async with SessionLocal() as session:
+        pending = PortfolioPositionPending(
+            portfolio_id=pf.id,
+            ticker="GME",
+            target_pct=Decimal("0.01"),
+            status=PendingPositionStatus.PENDING,
+        )
+        session.add(pending)
+        await session.commit()
+        await session.refresh(pending)
+        pending_id = pending.id
+
+    resp = await client.post(f"/portfolios/{pf.id}/pending/{pending_id}/reject")
+    assert resp.status_code == 204
+
+    async with SessionLocal() as session:
+        row = (
+            await session.execute(
+                select(PortfolioPositionPending).where(
+                    PortfolioPositionPending.id == pending_id
+                )
+            )
+        ).scalar_one()
+        assert row.status == PendingPositionStatus.REJECTED
+
+
+async def test_double_resolve_returns_409(client: AsyncClient, test_user: User):
+    pf = await _seed_portfolio(test_user)
+
+    async with SessionLocal() as session:
+        pending = PortfolioPositionPending(
+            portfolio_id=pf.id,
+            ticker="AMC",
+            target_pct=Decimal("0.01"),
+            status=PendingPositionStatus.PENDING,
+        )
+        session.add(pending)
+        await session.commit()
+        await session.refresh(pending)
+        pending_id = pending.id
+
+    # First accept
+    await client.post(
+        f"/portfolios/{pf.id}/pending/{pending_id}/accept",
+        json={"shares": "5", "avg_cost": "10.00"},
+    )
+    # Second accept must 409
+    resp = await client.post(
+        f"/portfolios/{pf.id}/pending/{pending_id}/accept",
+        json={"shares": "5", "avg_cost": "10.00"},
+    )
+    assert resp.status_code == 409
+
+
+# ---------------------------------------------------------------------------
+# Rebalance triggers
+# ---------------------------------------------------------------------------
+
+
+async def test_trigger_create_list_deactivate(
+    client: AsyncClient, test_user: User
+):
+    pf = await _seed_portfolio(test_user, "TrigPF")
+
+    create_resp = await client.post(
+        f"/portfolios/{pf.id}/triggers",
+        json={
+            "kind": "earnings_date",
+            "condition_json": {"note": "Q2 earnings"},
+            "fires_at": "2026-07-15T00:00:00Z",
+        },
+    )
+    assert create_resp.status_code == 201, create_resp.text
+    body = create_resp.json()
+    assert body["kind"] == "earnings_date"
+    assert body["active"] is True
+    trigger_id = body["id"]
+
+    list_resp = await client.get(f"/portfolios/{pf.id}/triggers")
+    assert list_resp.status_code == 200
+    assert any(t["id"] == trigger_id for t in list_resp.json())
+
+    del_resp = await client.delete(f"/portfolios/{pf.id}/triggers/{trigger_id}")
+    assert del_resp.status_code == 204
+
+    # Deactivated trigger absent from default list, present with include_inactive
+    list_after = await client.get(f"/portfolios/{pf.id}/triggers")
+    assert not any(t["id"] == trigger_id for t in list_after.json())
+
+    list_inactive = await client.get(
+        f"/portfolios/{pf.id}/triggers", params={"include_inactive": "true"}
+    )
+    match = next(t for t in list_inactive.json() if t["id"] == trigger_id)
+    assert match["active"] is False

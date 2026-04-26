@@ -19,4 +19,11 @@ celery_app.conf.update(
     task_track_started=True,
     timezone="UTC",
     enable_utc=True,
+    beat_schedule={
+        "evaluate-triggers-every-minute": {
+            "task": "maintenance.evaluate_triggers",
+            "schedule": 60.0,
+            "options": {"queue": "maintenance"},
+        },
+    },
 )

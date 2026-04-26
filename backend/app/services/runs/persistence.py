@@ -23,6 +23,7 @@ which marks status=FAILED and writes an `_error` step with the traceback.
 """
 from __future__ import annotations
 
+import asyncio
 import traceback
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -47,10 +48,14 @@ from app.models.db import (
     AgentRunFlow,
     AgentRunStatus,
     AgentRunStep,
+    PendingPositionStatus,
+    PortfolioPositionPending,
     PortfolioRecommendation,
     ResearchReport,
+    ResearchSignal,
     RiskProfile,
 )
+from app.services.redis_client import publish_run_event
 
 # Compile graphs once at import time. The compiled objects are stateless —
 # state lives per-invocation — so sharing them across calls is safe and cheaper
@@ -119,6 +124,9 @@ async def execute_research_run(run_id: UUID) -> SynthesisOutput:
         run.status = AgentRunStatus.RUNNING
         run.started_at = datetime.now(UTC)
         await session.commit()
+        asyncio.create_task(
+            publish_run_event(run_id, {"type": "status", "status": "running"})
+        )
 
         try:
             initial = new_research_state(
@@ -144,9 +152,25 @@ async def execute_research_run(run_id: UUID) -> SynthesisOutput:
                 confidence=synth.layers.confidence,
                 report_json=synth.model_dump(mode="json"),
             )
+            report_id = report.id  # UUID set by default= at construction
             session.add(report)
             await session.commit()
 
+            # Research BUY + portfolio context → queue pending position
+            if synth.signal == ResearchSignal.BUY and portfolio_id_raw:
+                pending = PortfolioPositionPending(
+                    portfolio_id=UUID(portfolio_id_raw),
+                    ticker=synth.ticker,
+                    target_pct=Decimal(str(synth.recommended_position_pct or 0)),
+                    source_report_id=report_id,
+                    status=PendingPositionStatus.PENDING,
+                )
+                session.add(pending)
+                await session.commit()
+
+            asyncio.create_task(
+                publish_run_event(run_id, {"type": "done", "status": "complete"})
+            )
             return synth
 
         except Exception as exc:
@@ -233,6 +257,9 @@ async def execute_portfolio_run(run_id: UUID) -> PortfolioConstructionOutput:
         run.status = AgentRunStatus.RUNNING
         run.started_at = datetime.now(UTC)
         await session.commit()
+        asyncio.create_task(
+            publish_run_event(run_id, {"type": "status", "status": "running"})
+        )
 
         try:
             holdings = [HoldingSnapshot.model_validate(h) for h in q.get("holdings", [])]
@@ -262,6 +289,9 @@ async def execute_portfolio_run(run_id: UUID) -> PortfolioConstructionOutput:
             session.add(recommendation)
             await session.commit()
 
+            asyncio.create_task(
+                publish_run_event(run_id, {"type": "done", "status": "complete"})
+            )
             return rec
 
         except Exception as exc:
@@ -323,21 +353,32 @@ async def _stream_and_persist(
         # per tick, but can be multiple when parallel branches finish in the
         # same loop iteration. Persist each one independently.
         step_completed_at = datetime.now(UTC)
+        pending_events: list[dict[str, Any]] = []
         for node_name, node_update in update.items():
             if not isinstance(node_update, dict):
                 continue
             accumulated.update(node_update)
+            jsonable_output = _to_jsonable(node_update)
 
             step = AgentRunStep(
                 run_id=run_id,
                 agent_name=node_name,
                 input=None,
-                output=_to_jsonable(node_update),
+                output=jsonable_output,
                 started_at=None,
                 completed_at=step_completed_at,
             )
             session.add(step)
+            pending_events.append({
+                "type": "step",
+                "agent_name": node_name,
+                "output": jsonable_output,
+                "error": None,
+                "completed_at": step_completed_at.isoformat(),
+            })
         await session.commit()
+        for event in pending_events:
+            asyncio.create_task(publish_run_event(run_id, event))
 
     return accumulated
 
@@ -379,6 +420,12 @@ async def _fail_run(session: AsyncSession, run: AgentRun, exc: BaseException) ->
         )
     )
     await session.commit()
+    asyncio.create_task(
+        publish_run_event(
+            run.id,
+            {"type": "done", "status": "failed", "error": error_text[:500]},
+        )
+    )
 
 
 def _to_jsonable(obj: Any) -> Any:

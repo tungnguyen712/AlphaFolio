@@ -11,6 +11,7 @@ with a "cannot be called from a running event loop" error.
 """
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
@@ -27,12 +28,23 @@ from app.db.session import SessionLocal
 from app.main import app
 from app.models.db import (
     AgentRun,
+    AgentRunFlow,
     AgentRunStatus,
+    AgentRunStep,
     Portfolio,
     PortfolioHolding,
     User,
 )
 from app.models.db.enums import AssetClass, RiskProfile
+
+
+def _parse_sse(text: str) -> list[dict]:
+    """Parse SSE stream text into a list of decoded JSON payloads."""
+    return [
+        json.loads(line[6:])
+        for line in text.splitlines()
+        if line.startswith("data: ")
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -245,4 +257,131 @@ async def test_get_other_users_run_returns_404(
     finally:
         async with SessionLocal() as session:
             await session.execute(delete(User).where(User.id == other_user_id))
+            await session.commit()
+
+
+# ---------------------------------------------------------------------------
+# SSE streaming: GET /runs/{run_id}/stream
+# ---------------------------------------------------------------------------
+
+
+async def test_stream_complete_run_replays_steps_and_done(
+    client: AsyncClient, test_user: User
+):
+    """Terminal run: all DB steps emitted as SSE events, followed by done."""
+    async with SessionLocal() as session:
+        run = AgentRun(
+            user_id=test_user.id,
+            flow=AgentRunFlow.RESEARCH,
+            ticker="NVDA",
+            status=AgentRunStatus.COMPLETE,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+        )
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
+
+        session.add(
+            AgentRunStep(
+                run_id=run.id,
+                agent_name="signal_analysis",
+                output={"signal": "buy"},
+                completed_at=datetime.now(UTC),
+            )
+        )
+        session.add(
+            AgentRunStep(
+                run_id=run.id,
+                agent_name="synthesis",
+                output={"ticker": "NVDA"},
+                completed_at=datetime.now(UTC),
+            )
+        )
+        await session.commit()
+        run_id = run.id
+
+    resp = await client.get(f"/runs/{run_id}/stream")
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+
+    events = _parse_sse(resp.text)
+    step_events = [e for e in events if e["type"] == "step"]
+    done_events = [e for e in events if e["type"] == "done"]
+
+    assert {e["agent_name"] for e in step_events} == {"signal_analysis", "synthesis"}
+    assert len(done_events) == 1
+    assert done_events[0]["status"] == "complete"
+    assert done_events[0].get("error") is None
+
+
+async def test_stream_failed_run_includes_error_in_done(
+    client: AsyncClient, test_user: User
+):
+    """FAILED run: _error step excluded from steps, error text in done event."""
+    async with SessionLocal() as session:
+        run = AgentRun(
+            user_id=test_user.id,
+            flow=AgentRunFlow.RESEARCH,
+            ticker="FAIL",
+            status=AgentRunStatus.FAILED,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+        )
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
+
+        session.add(
+            AgentRunStep(
+                run_id=run.id,
+                agent_name="_error",
+                error="ValueError: something went wrong",
+                completed_at=datetime.now(UTC),
+            )
+        )
+        await session.commit()
+        run_id = run.id
+
+    resp = await client.get(f"/runs/{run_id}/stream")
+    assert resp.status_code == 200
+
+    events = _parse_sse(resp.text)
+    step_events = [e for e in events if e["type"] == "step"]
+    done_events = [e for e in events if e["type"] == "done"]
+
+    assert step_events == []  # _error step not emitted as a step event
+    assert len(done_events) == 1
+    assert done_events[0]["status"] == "failed"
+    assert "ValueError" in (done_events[0].get("error") or "")
+
+
+async def test_stream_wrong_user_returns_404(
+    client: AsyncClient, test_user: User
+):
+    """Run owned by another user must 404 from the stream endpoint."""
+    async with SessionLocal() as session:
+        other = User(clerk_id=f"sse_other_{uuid.uuid4()}", email="x@example.com")
+        session.add(other)
+        await session.commit()
+        await session.refresh(other)
+
+        run = AgentRun(
+            user_id=other.id,
+            flow=AgentRunFlow.RESEARCH,
+            ticker="ZZZZ",
+            status=AgentRunStatus.COMPLETE,
+        )
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
+        other_run_id = run.id
+        other_id = other.id
+
+    try:
+        resp = await client.get(f"/runs/{other_run_id}/stream")
+        assert resp.status_code == 404
+    finally:
+        async with SessionLocal() as session:
+            await session.execute(delete(User).where(User.id == other_id))
             await session.commit()

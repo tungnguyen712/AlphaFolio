@@ -1,4 +1,4 @@
-"""Portfolio + holdings + recommendations endpoints.
+"""Portfolio + holdings + recommendations + pending positions + triggers endpoints.
 
 All resources scoped to the authenticated user; cross-user reads return 404
 to avoid leaking existence.
@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.api.deps import CurrentUserDep, DBSessionDep
+from app.api.schemas.pending import AcceptPendingBody, PendingPositionOut
 from app.api.schemas.portfolios import (
     HoldingCreate,
     HoldingOut,
@@ -20,10 +21,14 @@ from app.api.schemas.portfolios import (
     PortfolioWithHoldingsOut,
 )
 from app.api.schemas.recommendations import PortfolioRecommendationOut
+from app.api.schemas.triggers import TriggerCreate, TriggerOut
 from app.models.db import (
+    PendingPositionStatus,
     Portfolio,
     PortfolioHolding,
+    PortfolioPositionPending,
     PortfolioRecommendation,
+    RebalanceTrigger,
 )
 
 router = APIRouter(prefix="/portfolios", tags=["portfolios"])
@@ -206,6 +211,145 @@ async def list_recommendations(
 
 
 # ---------------------------------------------------------------------------
+# Pending positions (Research → Portfolio handoff)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{portfolio_id}/pending", response_model=list[PendingPositionOut])
+async def list_pending_positions(
+    portfolio_id: UUID,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+    include_resolved: bool = False,
+) -> list[PortfolioPositionPending]:
+    await _load_owned_portfolio(db, portfolio_id, user.id)
+    stmt = select(PortfolioPositionPending).where(
+        PortfolioPositionPending.portfolio_id == portfolio_id
+    )
+    if not include_resolved:
+        stmt = stmt.where(
+            PortfolioPositionPending.status == PendingPositionStatus.PENDING
+        )
+    stmt = stmt.order_by(PortfolioPositionPending.created_at.desc())
+    return list((await db.execute(stmt)).scalars().all())
+
+
+@router.post(
+    "/{portfolio_id}/pending/{pending_id}/accept",
+    response_model=HoldingOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def accept_pending_position(
+    portfolio_id: UUID,
+    pending_id: UUID,
+    body: AcceptPendingBody,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> PortfolioHolding:
+    await _load_owned_portfolio(db, portfolio_id, user.id)
+    pending = await _load_pending(db, pending_id, portfolio_id)
+    if pending.status != PendingPositionStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="position already resolved"
+        )
+    holding = PortfolioHolding(
+        portfolio_id=portfolio_id,
+        ticker=pending.ticker,
+        shares=body.shares,
+        avg_cost=body.avg_cost,
+        asset_class=body.asset_class,
+    )
+    db.add(holding)
+    pending.status = PendingPositionStatus.ACCEPTED
+    await db.commit()
+    await db.refresh(holding)
+    return holding
+
+
+@router.post(
+    "/{portfolio_id}/pending/{pending_id}/reject",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def reject_pending_position(
+    portfolio_id: UUID,
+    pending_id: UUID,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> None:
+    await _load_owned_portfolio(db, portfolio_id, user.id)
+    pending = await _load_pending(db, pending_id, portfolio_id)
+    if pending.status != PendingPositionStatus.PENDING:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="position already resolved"
+        )
+    pending.status = PendingPositionStatus.REJECTED
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Rebalance triggers
+# ---------------------------------------------------------------------------
+
+
+@router.post(
+    "/{portfolio_id}/triggers",
+    response_model=TriggerOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_trigger(
+    portfolio_id: UUID,
+    body: TriggerCreate,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> RebalanceTrigger:
+    await _load_owned_portfolio(db, portfolio_id, user.id)
+    trigger = RebalanceTrigger(
+        portfolio_id=portfolio_id,
+        kind=body.kind,
+        condition_json=body.condition_json,
+        fires_at=body.fires_at,
+        active=True,
+    )
+    db.add(trigger)
+    await db.commit()
+    await db.refresh(trigger)
+    return trigger
+
+
+@router.get("/{portfolio_id}/triggers", response_model=list[TriggerOut])
+async def list_triggers(
+    portfolio_id: UUID,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+    include_inactive: bool = False,
+) -> list[RebalanceTrigger]:
+    await _load_owned_portfolio(db, portfolio_id, user.id)
+    stmt = select(RebalanceTrigger).where(
+        RebalanceTrigger.portfolio_id == portfolio_id
+    )
+    if not include_inactive:
+        stmt = stmt.where(RebalanceTrigger.active.is_(True))
+    stmt = stmt.order_by(RebalanceTrigger.created_at.desc())
+    return list((await db.execute(stmt)).scalars().all())
+
+
+@router.delete(
+    "/{portfolio_id}/triggers/{trigger_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def deactivate_trigger(
+    portfolio_id: UUID,
+    trigger_id: UUID,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> None:
+    await _load_owned_portfolio(db, portfolio_id, user.id)
+    trigger = await _load_trigger(db, trigger_id, portfolio_id)
+    trigger.active = False
+    await db.commit()
+
+
+# ---------------------------------------------------------------------------
 # Helpers (also used by app/api/runs.py; not private to this module)
 # ---------------------------------------------------------------------------
 
@@ -243,5 +387,41 @@ async def _load_holding(
             status_code=status.HTTP_404_NOT_FOUND, detail="holding not found"
         )
     return holding
+
+
+async def _load_pending(
+    db, pending_id: UUID, portfolio_id: UUID
+) -> PortfolioPositionPending:
+    pending = (
+        await db.execute(
+            select(PortfolioPositionPending).where(
+                PortfolioPositionPending.id == pending_id,
+                PortfolioPositionPending.portfolio_id == portfolio_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if pending is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="pending position not found"
+        )
+    return pending
+
+
+async def _load_trigger(
+    db, trigger_id: UUID, portfolio_id: UUID
+) -> RebalanceTrigger:
+    trigger = (
+        await db.execute(
+            select(RebalanceTrigger).where(
+                RebalanceTrigger.id == trigger_id,
+                RebalanceTrigger.portfolio_id == portfolio_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if trigger is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="trigger not found"
+        )
+    return trigger
 
 

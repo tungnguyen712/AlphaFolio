@@ -72,3 +72,25 @@ class RunStatusOut(_APISchema):
     recommendation: dict[str, Any] | None = None
     # Populated when status == FAILED.
     error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# SSE streaming events (GET /runs/{id}/stream)
+# ---------------------------------------------------------------------------
+
+
+class RunEventOut(BaseModel):
+    """One SSE event emitted on GET /runs/{id}/stream.
+
+    `type` discriminates the event kind:
+      - "status"  : run transitioned to "running"
+      - "step"    : one agent node completed
+      - "done"    : terminal event; client should close the stream
+    """
+
+    type: Literal["status", "step", "done"]
+    status: str | None = None
+    agent_name: str | None = None
+    output: dict[str, Any] | None = None
+    error: str | None = None
+    completed_at: str | None = None
