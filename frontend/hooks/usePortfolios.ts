@@ -92,6 +92,30 @@ export function useCreatePortfolio() {
   return { mutate, loading, error };
 }
 
+export function useUpdatePortfolio(id: string) {
+  const api = useApi();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const mutate = useCallback(
+    async (body: { name?: string; risk_profile?: RiskProfile; cash_balance?: string }) => {
+      setLoading(true);
+      setError(null);
+      try {
+        return await api.patch<PortfolioOut>(`/portfolios/${id}`, body);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "failed to update portfolio");
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [api, id],
+  );
+
+  return { mutate, loading, error };
+}
+
 export function useDeletePortfolio() {
   const api = useApi();
   const [loading, setLoading] = useState(false);

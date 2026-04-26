@@ -79,7 +79,7 @@ export default function ResearchReportPage({ params }: { params: { id: string } 
   if (error) return <p className="text-red-600">{error}</p>;
   if (!report) return null;
 
-  const sources: ResearchSource[] = report.report.sources ?? [];
+  const sources: SourceRef[] = report.report.sources ?? [];
 
   return (
     <div className="space-y-6">

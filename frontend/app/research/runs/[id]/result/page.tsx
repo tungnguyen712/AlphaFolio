@@ -101,7 +101,7 @@ export default function ResearchRunResultPage({ params }: { params: { id: string
 
   if (!run.report) return <p className="text-neutral-500">No report generated.</p>;
 
-  const sources: ResearchSource[] = run.report.sources ?? [];
+  const sources: SourceRef[] = run.report.sources ?? [];
   const newsSources = sources.filter((s) => s.kind === "news");
 
   return (

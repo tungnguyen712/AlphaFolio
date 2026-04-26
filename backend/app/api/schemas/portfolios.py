@@ -30,6 +30,14 @@ class PortfolioCreate(BaseModel):
     risk_profile: RiskProfile
 
 
+class PortfolioUpdate(BaseModel):
+    """All fields optional — PATCH semantics. Send only what you want changed."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    risk_profile: RiskProfile | None = None
+    cash_balance: Decimal | None = Field(default=None, ge=0)
+
+
 class PortfolioOut(_APISchema):
     id: UUID
     name: str
@@ -72,3 +80,17 @@ class HoldingOut(_APISchema):
 
 class PortfolioWithHoldingsOut(PortfolioOut):
     holdings: list[HoldingOut] = []
+
+
+# ---------------------------------------------------------------------------
+# Market data (prices endpoint)
+# ---------------------------------------------------------------------------
+
+
+class TickerMarketData(BaseModel):
+    prev_close: float | None = None
+    sector: str | None = None
+
+
+class PortfolioPricesOut(BaseModel):
+    prices: dict[str, TickerMarketData]

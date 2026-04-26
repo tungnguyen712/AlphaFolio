@@ -179,6 +179,19 @@ export interface TriggerOut {
 }
 
 // ---------------------------------------------------------------------------
+// Market data (portfolio prices endpoint)
+// ---------------------------------------------------------------------------
+
+export interface TickerMarketData {
+  prev_close: number | null;
+  sector: string | null;
+}
+
+export interface PortfolioPricesOut {
+  prices: Record<string, TickerMarketData>;
+}
+
+// ---------------------------------------------------------------------------
 // Notifications
 // ---------------------------------------------------------------------------
 

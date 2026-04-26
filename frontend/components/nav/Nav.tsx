@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { useNotifications } from "@/hooks/useNotifications";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import type { NotificationOut } from "@/lib/types";
 
 function notifHref(n: NotificationOut): string {
@@ -31,8 +32,8 @@ export function Nav() {
 
   const isActive = (prefix: string) =>
     pathname.startsWith(prefix)
-      ? "font-semibold text-neutral-900"
-      : "text-neutral-500 hover:text-neutral-800";
+      ? "font-semibold text-sky-600 dark:text-sky-400"
+      : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200";
 
   const handleNotifClick = async (n: NotificationOut) => {
     setBellOpen(false);
@@ -41,10 +42,10 @@ export function Nav() {
   };
 
   return (
-    <nav className="sticky top-0 z-30 border-b border-neutral-200 bg-white/90 backdrop-blur-sm">
+    <nav className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
         <div className="flex items-center gap-8">
-          <Link href="/" className="text-base font-bold tracking-tight text-neutral-900">
+          <Link href="/" className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
             AlphaFolio
           </Link>
           <div className="flex items-center gap-6">
@@ -60,12 +61,11 @@ export function Nav() {
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
-          {/* Notification bell */}
+        <div className="flex items-center gap-2">
           <div className="relative">
             <button
               onClick={() => setBellOpen((v) => !v)}
-              className="relative rounded-md p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-neutral-800"
+              className="relative rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
               aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
             >
               <svg
@@ -89,19 +89,19 @@ export function Nav() {
             </button>
 
             {bellOpen && (
-              <div className="absolute right-0 mt-2 w-80 rounded-xl border border-neutral-200 bg-white shadow-lg">
-                <div className="border-b border-neutral-100 px-4 py-3">
-                  <p className="text-sm font-semibold text-neutral-800">Notifications</p>
+              <div className="absolute right-0 mt-2 w-80 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+                <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Notifications</p>
                 </div>
-                <ul className="max-h-72 divide-y divide-neutral-100 overflow-y-auto">
+                <ul className="max-h-72 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800">
                   {notifications.slice(0, 8).map((n) => (
                     <li key={n.id}>
                       <button
                         onClick={() => void handleNotifClick(n)}
-                        className="w-full px-4 py-3 text-left hover:bg-neutral-50"
+                        className="w-full px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
                       >
                         <p
-                          className={`text-sm ${n.read_at ? "text-neutral-500" : "font-medium text-neutral-900"}`}
+                          className={`text-sm ${n.read_at ? "text-zinc-500 dark:text-zinc-400" : "font-medium text-zinc-900 dark:text-zinc-100"}`}
                         >
                           {n.kind === "run_complete"
                             ? "Run completed"
@@ -109,23 +109,23 @@ export function Nav() {
                               ? "Rebalance trigger fired"
                               : "Notification"}
                         </p>
-                        <p className="mt-0.5 text-xs text-neutral-400">
+                        <p className="mt-0.5 font-mono text-xs text-zinc-400 dark:text-zinc-500">
                           {new Date(n.created_at).toLocaleDateString()}
                         </p>
                       </button>
                     </li>
                   ))}
                   {notifications.length === 0 && (
-                    <li className="px-4 py-6 text-center text-sm text-neutral-400">
+                    <li className="px-4 py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
                       No notifications
                     </li>
                   )}
                 </ul>
-                <div className="border-t border-neutral-100 px-4 py-2">
+                <div className="border-t border-zinc-100 px-4 py-2 dark:border-zinc-800">
                   <Link
                     href="/notifications"
                     onClick={() => setBellOpen(false)}
-                    className="text-xs text-neutral-500 hover:text-neutral-800"
+                    className="text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
                   >
                     View all
                   </Link>
@@ -134,6 +134,7 @@ export function Nav() {
             )}
           </div>
 
+          <ThemeToggle />
           <UserButton afterSignOutUrl="/sign-in" />
         </div>
       </div>

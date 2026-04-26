@@ -5,12 +5,15 @@ to avoid leaking existence.
 """
 from __future__ import annotations
 
+import asyncio
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.api.deps import CurrentUserDep, DBSessionDep
+from app.config import get_settings
+from app.services.data_providers import polygon_prices, yahoo_prices
 from app.api.schemas.pending import AcceptPendingBody, CreatePendingBody, PendingPositionOut
 from app.api.schemas.portfolios import (
     HoldingCreate,
@@ -18,7 +21,10 @@ from app.api.schemas.portfolios import (
     HoldingUpdate,
     PortfolioCreate,
     PortfolioOut,
+    PortfolioPricesOut,
+    PortfolioUpdate,
     PortfolioWithHoldingsOut,
+    TickerMarketData,
 )
 from app.api.schemas.recommendations import PortfolioRecommendationOut
 from app.api.schemas.triggers import TriggerCreate, TriggerOut
@@ -92,6 +98,27 @@ async def get_portfolio(
     )
 
 
+@router.patch("/{portfolio_id}", response_model=PortfolioOut)
+async def update_portfolio(
+    portfolio_id: UUID,
+    body: PortfolioUpdate,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> Portfolio:
+    portfolio = await _load_owned_portfolio(db, portfolio_id, user.id)
+
+    if body.name is not None:
+        portfolio.name = body.name
+    if body.risk_profile is not None:
+        portfolio.risk_profile = body.risk_profile
+    if body.cash_balance is not None:
+        portfolio.cash_balance = body.cash_balance
+
+    await db.commit()
+    await db.refresh(portfolio)
+    return portfolio
+
+
 @router.delete("/{portfolio_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_portfolio(
     portfolio_id: UUID,
@@ -101,6 +128,51 @@ async def delete_portfolio(
     portfolio = await _load_owned_portfolio(db, portfolio_id, user.id)
     await db.delete(portfolio)
     await db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Market data (prices + sector for dashboard)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{portfolio_id}/prices", response_model=PortfolioPricesOut)
+async def get_portfolio_prices(
+    portfolio_id: UUID,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> PortfolioPricesOut:
+    portfolio = await _load_owned_portfolio(db, portfolio_id, user.id)
+    holdings_rows = (
+        await db.execute(
+            select(PortfolioHolding).where(PortfolioHolding.portfolio_id == portfolio.id)
+        )
+    ).scalars().all()
+
+    tickers = [h.ticker for h in holdings_rows]
+    if not tickers:
+        return PortfolioPricesOut(prices={})
+
+    api_key = get_settings().polygon_api_key
+    if api_key:
+        prices, sectors = await asyncio.gather(
+            polygon_prices.fetch_prev_close_batch(tickers, api_key),
+            polygon_prices.fetch_ticker_details_batch(tickers, api_key),
+        )
+    else:
+        prices, sectors = await asyncio.gather(
+            yahoo_prices.fetch_prev_close_batch(tickers),
+            yahoo_prices.fetch_ticker_details_batch(tickers),
+        )
+
+    return PortfolioPricesOut(
+        prices={
+            t: TickerMarketData(
+                prev_close=prices.get(t),
+                sector=sectors.get(t),
+            )
+            for t in tickers
+        }
+    )
 
 
 # ---------------------------------------------------------------------------

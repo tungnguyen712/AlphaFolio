@@ -1,3 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+html {
+  color-scheme: light dark;
+}
+
+* {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.1s ease;
+}

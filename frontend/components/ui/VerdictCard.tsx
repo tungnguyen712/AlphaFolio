@@ -14,14 +14,14 @@ function signalFromVerdict(verdict: string): ResearchSignal {
 }
 
 const badgeClasses: Record<ResearchSignal, string> = {
-  buy: "bg-green-100 text-green-800 ring-green-200",
-  hold: "bg-yellow-100 text-yellow-800 ring-yellow-200",
-  sell: "bg-red-100 text-red-800 ring-red-200",
+  buy: "bg-emerald-100 text-emerald-800 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:ring-emerald-800",
+  hold: "bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:ring-amber-800",
+  sell: "bg-red-100 text-red-800 ring-red-200 dark:bg-red-950 dark:text-red-300 dark:ring-red-800",
 };
 
 const barClasses: Record<ResearchSignal, string> = {
-  buy: "bg-green-500",
-  hold: "bg-yellow-500",
+  buy: "bg-emerald-500",
+  hold: "bg-amber-500",
   sell: "bg-red-500",
 };
 
@@ -30,11 +30,11 @@ export function VerdictCard({ layers, signal, ticker }: VerdictCardProps) {
   const confidencePct = Math.round(layers.confidence * 100);
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm">
+    <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex items-start justify-between gap-6">
         <div className="flex-1">
           {ticker && (
-            <p className="mb-1 text-sm font-semibold uppercase tracking-wider text-neutral-400">
+            <p className="mb-1 text-sm font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
               {ticker}
             </p>
           )}
@@ -44,41 +44,43 @@ export function VerdictCard({ layers, signal, ticker }: VerdictCardProps) {
             >
               {resolvedSignal.toUpperCase()}
             </span>
-            <p className="text-lg font-semibold text-neutral-800">{layers.verdict}</p>
+            <p className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">{layers.verdict}</p>
           </div>
         </div>
         <div className="flex flex-col items-end gap-1.5">
-          <span className="text-xl font-bold text-neutral-700">{confidencePct}%</span>
-          <div className="h-2 w-24 overflow-hidden rounded-full bg-neutral-200">
+          <span className="font-mono text-xl font-bold text-zinc-700 dark:text-zinc-200">
+            {confidencePct}%
+          </span>
+          <div className="h-2 w-24 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
             <div
               className={`h-full rounded-full ${barClasses[resolvedSignal]}`}
               style={{ width: `${confidencePct}%` }}
             />
           </div>
-          <span className="text-xs text-neutral-400">confidence</span>
+          <span className="text-xs text-zinc-400 dark:text-zinc-500">confidence</span>
         </div>
       </div>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2">
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
             Top signals
           </p>
           <ul className="space-y-2">
-            {layers.top_3_signals.map((signal, i) => (
-              <li key={i} className="flex items-start gap-2 text-base text-neutral-700">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-neutral-400" />
-                {signal}
+            {layers.top_3_signals.map((sig, i) => (
+              <li key={i} className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-400 dark:bg-zinc-500" />
+                {sig}
               </li>
             ))}
           </ul>
         </div>
 
-        <div className="rounded-md border border-yellow-200 bg-yellow-50 p-4">
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-yellow-700">
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
+          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
             ⚠ Key uncertainty
           </p>
-          <p className="text-base text-yellow-800">{layers.key_uncertainty}</p>
+          <p className="text-sm text-amber-800 dark:text-amber-200">{layers.key_uncertainty}</p>
         </div>
       </div>
     </div>
