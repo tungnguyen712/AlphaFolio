@@ -76,6 +76,23 @@ async def _resolve_cik(ticker: str) -> dict[str, Any]:
             cik = str(row["cik_str"]).zfill(10)
             return {"cik": cik, "ticker": upper, "title": row.get("title", "")}
 
+    # Fallback: try interpreting the input as a company name
+    # (e.g. user types "ECHOSTAR" which is a company name, not a ticker)
+    name_upper = upper
+    starts_with = [
+        r for r in table.values()
+        if str(r.get("title", "")).upper().startswith(name_upper)
+    ]
+    if len(starts_with) == 1:
+        row = starts_with[0]
+        cik = str(row["cik_str"]).zfill(10)
+        return {"cik": cik, "ticker": str(row.get("ticker", upper)).upper(), "title": row.get("title", "")}
+    if len(starts_with) > 1:
+        # Pick the shortest (most likely the flagship legal entity)
+        row = min(starts_with, key=lambda r: len(str(r.get("title", ""))))
+        cik = str(row["cik_str"]).zfill(10)
+        return {"cik": cik, "ticker": str(row.get("ticker", upper)).upper(), "title": row.get("title", "")}
+
     raise LookupError(f"Ticker {ticker!r} not found in SEC company_tickers master list")
 
 

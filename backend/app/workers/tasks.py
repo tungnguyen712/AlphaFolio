@@ -18,7 +18,7 @@ from uuid import UUID
 
 from sqlalchemy import select
 
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, engine as db_engine
 from app.models.db import Notification, NotificationKind, Portfolio, RebalanceTrigger
 from app.services.runs.persistence import execute_portfolio_run, execute_research_run
 from app.workers.celery_app import celery_app
@@ -32,13 +32,21 @@ def run_research_task(run_id: str) -> str:
     tracking). Failures bubble up so Celery marks the task FAILURE, but the
     AgentRun row in Postgres is the actual source of truth — the API reads
     from there, not from Celery's result backend."""
-    asyncio.run(execute_research_run(UUID(run_id)))
+    async def _run() -> None:
+        await db_engine.dispose(close=False)
+        await execute_research_run(UUID(run_id))
+
+    asyncio.run(_run())
     return run_id
 
 
 @celery_app.task(name="portfolio.execute", acks_late=True)
 def run_portfolio_task(run_id: str) -> str:
-    asyncio.run(execute_portfolio_run(UUID(run_id)))
+    async def _run() -> None:
+        await db_engine.dispose(close=False)
+        await execute_portfolio_run(UUID(run_id))
+
+    asyncio.run(_run())
     return run_id
 
 
@@ -54,6 +62,7 @@ def evaluate_triggers_task() -> int:
 
 
 async def _evaluate_triggers() -> int:
+    await db_engine.dispose(close=False)
     now = datetime.now(UTC)
     async with SessionLocal() as session:
         rows = (

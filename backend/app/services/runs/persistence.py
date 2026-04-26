@@ -405,6 +405,7 @@ async def _fail_run(session: AsyncSession, run: AgentRun, exc: BaseException) ->
     await session.rollback()
 
     error_text = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    error_msg = f"{type(exc).__name__}: {exc}"
     run.status = AgentRunStatus.FAILED
     run.completed_at = datetime.now(UTC)
     session.add(run)
@@ -423,7 +424,7 @@ async def _fail_run(session: AsyncSession, run: AgentRun, exc: BaseException) ->
     asyncio.create_task(
         publish_run_event(
             run.id,
-            {"type": "done", "status": "failed", "error": error_text[:500]},
+            {"type": "done", "status": "failed", "error": error_msg[:300]},
         )
     )
 

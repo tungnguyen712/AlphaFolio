@@ -11,7 +11,7 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.api.deps import CurrentUserDep, DBSessionDep
-from app.api.schemas.pending import AcceptPendingBody, PendingPositionOut
+from app.api.schemas.pending import AcceptPendingBody, CreatePendingBody, PendingPositionOut
 from app.api.schemas.portfolios import (
     HoldingCreate,
     HoldingOut,
@@ -232,6 +232,31 @@ async def list_pending_positions(
         )
     stmt = stmt.order_by(PortfolioPositionPending.created_at.desc())
     return list((await db.execute(stmt)).scalars().all())
+
+
+@router.post(
+    "/{portfolio_id}/pending",
+    response_model=PendingPositionOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_pending_position(
+    portfolio_id: UUID,
+    body: CreatePendingBody,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> PortfolioPositionPending:
+    await _load_owned_portfolio(db, portfolio_id, user.id)
+    pending = PortfolioPositionPending(
+        portfolio_id=portfolio_id,
+        ticker=body.ticker.upper(),
+        target_pct=body.target_pct,
+        source_report_id=body.source_report_id,
+        status=PendingPositionStatus.PENDING,
+    )
+    db.add(pending)
+    await db.commit()
+    await db.refresh(pending)
+    return pending
 
 
 @router.post(

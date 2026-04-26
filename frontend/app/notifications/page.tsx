@@ -1,0 +1,75 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { useNotifications } from "@/hooks/useNotifications";
+import type { NotificationOut } from "@/lib/types";
+import { Spinner } from "@/components/ui/Spinner";
+import { EmptyState } from "@/components/ui/EmptyState";
+
+function notifHref(n: NotificationOut): string {
+  const p = n.payload;
+  if (n.kind === "run_complete") {
+    const flow = p.flow as string | undefined;
+    const runId = p.run_id as string | undefined;
+    const pid = p.portfolio_id as string | undefined;
+    if (flow === "research" && runId) return `/research/runs/${runId}/result`;
+    if (pid) return `/portfolios/${pid}`;
+  }
+  if (n.kind === "rebalance_trigger") {
+    const pid = p.portfolio_id as string | undefined;
+    if (pid) return `/portfolios/${pid}/triggers`;
+  }
+  return "/";
+}
+
+export default function NotificationsPage() {
+  const router = useRouter();
+  const { notifications, markRead, loading, error } = useNotifications(false);
+
+  const handleClick = async (n: NotificationOut) => {
+    if (!n.read_at) await markRead(n.id);
+    router.push(notifHref(n));
+  };
+
+  if (loading) return <Spinner />;
+  if (error) return <p className="text-sm text-red-600">{error}</p>;
+
+  return (
+    <div>
+      <h2 className="mb-6 text-xl font-bold text-neutral-900">Notifications</h2>
+      {notifications.length === 0 ? (
+        <EmptyState title="No notifications" description="You're all caught up." />
+      ) : (
+        <ul className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white shadow-sm">
+          {notifications.map((n) => (
+            <li key={n.id}>
+              <button
+                onClick={() => void handleClick(n)}
+                className="flex w-full items-start justify-between px-6 py-4 text-left hover:bg-neutral-50"
+              >
+                <div className="space-y-0.5">
+                  <p
+                    className={`text-sm ${n.read_at ? "text-neutral-500" : "font-medium text-neutral-900"}`}
+                  >
+                    {n.kind === "run_complete"
+                      ? "Run completed"
+                      : n.kind === "rebalance_trigger"
+                        ? "Rebalance trigger fired"
+                        : "Notification"}
+                  </p>
+                  <p className="text-xs text-neutral-400">
+                    {new Date(n.created_at).toLocaleString()}
+                  </p>
+                  {!n.read_at && (
+                    <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
+                  )}
+                </div>
+                <span className="ml-4 text-xs text-neutral-400">→</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

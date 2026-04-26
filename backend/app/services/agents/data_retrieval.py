@@ -41,6 +41,25 @@ async def run(inputs: DataRetrievalInput) -> DataRetrievalOutput:
     return await _run_public(inputs)
 
 
+async def _safe_form4(ticker: str, lookback: int) -> dict[str, Any]:
+    try:
+        return await sec_edgar.fetch_form4_transactions(ticker, lookback_days=lookback)
+    except LookupError:
+        return {"insider_filings": []}
+
+
+async def _safe_10k(ticker: str) -> dict[str, Any]:
+    """Fetch 10-K excerpts, returning empty on any ticker-resolution failure.
+
+    Falls back to an empty dict rather than crashing the whole run when the
+    ticker is delisted, OTC-only, or not yet in SEC's master list.
+    """
+    try:
+        return await sec_edgar.fetch_10k_excerpts(ticker)
+    except LookupError:
+        return {"risk_factors_excerpt": "", "filing_url": "", "filed_at": ""}
+
+
 # ---------------------------------------------------------------------------
 # Public branch
 # ---------------------------------------------------------------------------
@@ -50,8 +69,8 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
     ticker = inputs.ticker
     lookback = inputs.lookback_days
 
-    form4_task = sec_edgar.fetch_form4_transactions(ticker, lookback_days=lookback)
-    tenk_task = sec_edgar.fetch_10k_excerpts(ticker)
+    form4_task = _safe_form4(ticker, lookback)
+    tenk_task = _safe_10k(ticker)
     congress_task = quiver_stub.fetch_congress_trades(ticker)
     polygon_task = _safe_polygon(ticker)
 

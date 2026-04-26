@@ -23,6 +23,12 @@ class PendingPositionOut(BaseModel):
     updated_at: datetime
 
 
+class CreatePendingBody(BaseModel):
+    ticker: str = Field(min_length=1, max_length=16)
+    target_pct: Decimal = Field(gt=0, le=1)
+    source_report_id: UUID | None = None
+
+
 class AcceptPendingBody(BaseModel):
     shares: Decimal = Field(gt=0)
     avg_cost: Decimal = Field(ge=0)

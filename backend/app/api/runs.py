@@ -332,14 +332,59 @@ async def _run_event_generator(
 
         # If run completed while we were setting up, emit done and return.
         if current_status in (AgentRunStatus.COMPLETE, AgentRunStatus.FAILED):
-            yield sse({"type": "done", "status": current_status.value})
+            error_row = next((r for r in rows if r.agent_name == "_error"), None)
+            yield sse({
+                "type": "done",
+                "status": current_status.value,
+                "error": error_row.error if error_row and current_status == AgentRunStatus.FAILED else None,
+            })
             return
 
         # Stream live events from Redis.
         deadline = asyncio.get_event_loop().time() + 600  # 10 min max
-        async for message in pubsub.listen():
-            if message["type"] != "message":
+        while True:
+            if asyncio.get_event_loop().time() > deadline:
+                yield sse({"type": "done", "status": "failed", "error": "stream timeout"})
+                return
+
+            # Poll with a short timeout so we can re-check run status periodically.
+            message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=2.0)
+            if message is None:
+                # No message yet — check if run already completed in DB (catch-up).
+                async with SessionLocal() as db:
+                    check = (await db.execute(
+                        select(AgentRun).where(AgentRun.id == run_id)
+                    )).scalar_one_or_none()
+                if check and check.status in (AgentRunStatus.COMPLETE, AgentRunStatus.FAILED):
+                    # Replay any steps we haven't emitted yet.
+                    async with SessionLocal() as db:
+                        late_rows = (await db.execute(
+                            select(AgentRunStep)
+                            .where(AgentRunStep.run_id == run_id)
+                            .order_by(AgentRunStep.completed_at.nulls_last())
+                        )).scalars().all()
+                    err: str | None = None
+                    for r in late_rows:
+                        if r.agent_name == "_error":
+                            err = r.error
+                            continue
+                        key = (r.agent_name, r.completed_at.isoformat() if r.completed_at else None)
+                        if key not in seen:
+                            yield sse({
+                                "type": "step",
+                                "agent_name": r.agent_name,
+                                "output": r.output,
+                                "error": r.error,
+                                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
+                            })
+                    yield sse({
+                        "type": "done",
+                        "status": check.status.value,
+                        "error": err if check.status == AgentRunStatus.FAILED else None,
+                    })
+                    return
                 continue
+
             payload = json.loads(message["data"])
 
             # Deduplicate steps already replayed from DB.
@@ -354,9 +399,6 @@ async def _run_event_generator(
 
             yield sse(payload)
             if payload.get("type") == "done":
-                return
-            if asyncio.get_event_loop().time() > deadline:
-                yield sse({"type": "done", "status": "failed", "error": "stream timeout"})
                 return
 
 
