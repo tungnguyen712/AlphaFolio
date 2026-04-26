@@ -20,11 +20,19 @@ export type NotificationKind = "rebalance_trigger" | "run_complete" | "other";
 // Shared: VerdictLayer — embedded in every recommendation surface
 // ---------------------------------------------------------------------------
 
+export interface PriceTarget {
+  price: number;
+  horizon: string;
+  rationale: string;
+}
+
 export interface VerdictLayer {
   verdict: string;
   top_3_signals: string[];
   key_uncertainty: string;
   confidence: number; // 0..1
+  entry_price_target: PriceTarget | null;
+  exit_price_target: PriceTarget | null;
 }
 
 // ---------------------------------------------------------------------------

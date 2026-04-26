@@ -45,6 +45,7 @@ class ResearchState(TypedDict, total=False):
     mode: RetrievalMode
     lookback_days: int
     portfolio_id: str | None
+    in_portfolio: bool
 
     # Populated as the graph executes.
     retrieved: DataRetrievalOutput
@@ -60,6 +61,7 @@ def new_research_state(
     mode: RetrievalMode = "public",
     lookback_days: int = 90,
     portfolio_id: str | None = None,
+    in_portfolio: bool = False,
 ) -> ResearchState:
     """Build the initial state for a research run.
 
@@ -76,6 +78,7 @@ def new_research_state(
         mode=mode,
         lookback_days=lookback_days,
         portfolio_id=portfolio_id,
+        in_portfolio=in_portfolio,
     )
 
 
@@ -128,6 +131,11 @@ async def _devils_advocate_node(state: ResearchState) -> dict:
 
 
 async def _synthesis_node(state: ResearchState) -> dict:
+    retrieved = state.get("retrieved")
+    current_price: float | None = None
+    if retrieved and retrieved.price_summary:
+        current_price = retrieved.price_summary.latest
+
     out = await synthesis.run(
         SynthesisInput(
             ticker=state["ticker"],
@@ -135,6 +143,8 @@ async def _synthesis_node(state: ResearchState) -> dict:
             devils_advocate=state["devils_advocate"],
             market_intel=state.get("market_intel"),
             portfolio_id=state.get("portfolio_id"),
+            in_portfolio=state.get("in_portfolio", False),
+            current_price=current_price,
         )
     )
     return {"synthesis": out}

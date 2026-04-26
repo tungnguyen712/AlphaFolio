@@ -24,6 +24,14 @@ class SynthesisInput(AgentModel):
         default=None,
         description="If set, Research was invoked from Portfolio — report stays tagged to that portfolio.",
     )
+    in_portfolio: bool = Field(
+        default=False,
+        description="True if the user already holds this ticker in any portfolio.",
+    )
+    current_price: float | None = Field(
+        default=None,
+        description="Most recent closing price in USD (PriceSummary.latest). Baseline for target math.",
+    )
 
 
 class SynthesisOutput(AgentModel):

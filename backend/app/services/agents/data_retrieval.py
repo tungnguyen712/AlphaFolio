@@ -31,7 +31,8 @@ from app.models.agents import (
     RiskFactorsExcerpt,
     VolumeAnomaly,
 )
-from app.services.data_providers import polygon_stub, quiver_stub, sec_edgar
+from app.config import get_settings
+from app.services.data_providers import polygon_prices, polygon_stub, quiver_stub, sec_edgar, yahoo_prices
 from app.services.data_providers.polygon_stub import PolygonFixtureMissingError
 
 
@@ -183,11 +184,27 @@ async def _safe_form_d(company_name: str) -> list[dict[str, Any]]:
 
 
 async def _safe_polygon(ticker: str) -> dict[str, Any]:
-    """Missing Polygon fixture is legitimate during dev; return an empty shape instead of blowing up."""
+    """Try fixture first; fall back to live Polygon then Yahoo when no fixture exists."""
     try:
         return await polygon_stub.fetch_market_intel(ticker)
     except PolygonFixtureMissingError:
-        return {}
+        pass
+
+    # No fixture — fetch live prev-close so price_summary.latest is populated.
+    settings = get_settings()
+    price: float | None = None
+
+    if settings.polygon_api_key:
+        prices = await polygon_prices.fetch_prev_close_batch([ticker], settings.polygon_api_key)
+        price = prices.get(ticker)
+
+    if price is None:
+        prices = await yahoo_prices.fetch_prev_close_batch([ticker])
+        price = prices.get(ticker)
+
+    if price is not None:
+        return {"price_series": {"latest": price}}
+    return {}
 
 
 def _price_summary(polygon: dict[str, Any]) -> PriceSummary | None:

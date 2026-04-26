@@ -33,7 +33,7 @@ export function SectorBar({ data }: SectorBarProps) {
   if (data.length === 0) {
     return (
       <div className="flex h-20 items-center justify-center text-xs text-zinc-400 dark:text-zinc-500">
-        Sector data unavailable — set POLYGON_API_KEY to enable
+        Sector data unavailable
       </div>
     );
   }

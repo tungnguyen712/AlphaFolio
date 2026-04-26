@@ -158,6 +158,12 @@ class MacroContext(AgentModel):
     key_drivers: list[str] = Field(default_factory=list)
 
 
+class PriceTarget(AgentModel):
+    price: float = Field(description="Target price in USD.")
+    horizon: str = Field(description="Expected time window, e.g. '3–6 months'.")
+    rationale: str = Field(description="One-sentence basis derived from the signal set.")
+
+
 class VerdictLayer(AgentModel):
     """The three layers that every recommendation surface MUST expose.
 
@@ -176,4 +182,12 @@ class VerdictLayer(AgentModel):
     )
     confidence: float = Field(
         ge=0.0, le=1.0, description="Model-assigned probability the verdict is correct."
+    )
+    entry_price_target: PriceTarget | None = Field(
+        default=None,
+        description="Limit-order entry level — set only when signal=BUY and user does not hold the ticker.",
+    )
+    exit_price_target: PriceTarget | None = Field(
+        default=None,
+        description="Take-profit / stop-loss level — set only when user already holds the ticker.",
     )

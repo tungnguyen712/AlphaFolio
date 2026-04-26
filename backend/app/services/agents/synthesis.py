@@ -31,6 +31,13 @@ Non-negotiables:
   - `recommended_position_pct` only for BUY. Leave null for HOLD/SELL.
   - Every claim in `rationale` must trace to either the signal analysis or the
     counterargument set — don't introduce new facts.
+  - Price targets: inspect `in_portfolio`, `signal`, and `current_price` in the payload.
+    · `in_portfolio=true`: set `layers.exit_price_target` — a realistic take-profit or
+      stop-loss derived from technicals and risk factors. Set `layers.entry_price_target` null.
+    · `in_portfolio=false` and `signal=buy`: set `layers.entry_price_target` — a limit-order
+      entry at or near current price with a near-term horizon. Set `layers.exit_price_target` null.
+    · Otherwise (hold/sell with no position): both targets null.
+    · If `current_price` is null, set both targets null — do not invent a price.
 
 Call the record_output tool. Never respond with free prose."""
 
@@ -55,6 +62,8 @@ def _build_user_prompt(inputs: SynthesisInput) -> str:
             inputs.market_intel.model_dump(mode="json") if inputs.market_intel else None
         ),
         "portfolio_id": inputs.portfolio_id,
+        "in_portfolio": inputs.in_portfolio,
+        "current_price": inputs.current_price,
     }
     return (
         f"Synthesize the research on {inputs.ticker} into a final ResearchReport. "

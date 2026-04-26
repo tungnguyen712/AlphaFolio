@@ -14,7 +14,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_BASE = "https://api.polygon.io"
+_BASE = "https://api.massive.com"
 _TIMEOUT = 10.0
 
 

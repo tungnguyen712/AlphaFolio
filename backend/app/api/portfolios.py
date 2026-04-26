@@ -158,6 +158,12 @@ async def get_portfolio_prices(
             polygon_prices.fetch_prev_close_batch(tickers, api_key),
             polygon_prices.fetch_ticker_details_batch(tickers, api_key),
         )
+        # Fall back to Yahoo if Polygon returned nothing (bad/wrong key, rate limit, etc.)
+        if not any(v is not None for v in prices.values()):
+            prices, sectors = await asyncio.gather(
+                yahoo_prices.fetch_prev_close_batch(tickers),
+                yahoo_prices.fetch_ticker_details_batch(tickers),
+            )
     else:
         prices, sectors = await asyncio.gather(
             yahoo_prices.fetch_prev_close_batch(tickers),

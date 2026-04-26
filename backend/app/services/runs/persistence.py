@@ -49,6 +49,8 @@ from app.models.db import (
     AgentRunStatus,
     AgentRunStep,
     PendingPositionStatus,
+    Portfolio,
+    PortfolioHolding,
     PortfolioPositionPending,
     PortfolioRecommendation,
     ResearchReport,
@@ -129,11 +131,27 @@ async def execute_research_run(run_id: UUID) -> SynthesisOutput:
         )
 
         try:
+            ticker_str = queued_inputs.get("ticker") or run.ticker or ""
+            ticker_upper = ticker_str.upper()
+            in_portfolio = False
+            if ticker_upper:
+                check = await session.execute(
+                    select(PortfolioHolding.id)
+                    .join(Portfolio, PortfolioHolding.portfolio_id == Portfolio.id)
+                    .where(
+                        Portfolio.user_id == run.user_id,
+                        PortfolioHolding.ticker == ticker_upper,
+                    )
+                    .limit(1)
+                )
+                in_portfolio = check.scalar_one_or_none() is not None
+
             initial = new_research_state(
-                ticker=queued_inputs.get("ticker") or run.ticker or "",
+                ticker=ticker_str,
                 mode=queued_inputs.get("mode", "public"),
                 lookback_days=queued_inputs.get("lookback_days", 90),
                 portfolio_id=queued_inputs.get("portfolio_id"),
+                in_portfolio=in_portfolio,
             )
             final_state = await _stream_and_persist(
                 session, _research_graph, initial, run_id

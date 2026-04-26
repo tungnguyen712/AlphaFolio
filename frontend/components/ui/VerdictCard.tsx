@@ -83,6 +83,25 @@ export function VerdictCard({ layers, signal, ticker }: VerdictCardProps) {
           <p className="text-sm text-amber-800 dark:text-amber-200">{layers.key_uncertainty}</p>
         </div>
       </div>
+
+      {(layers.entry_price_target || layers.exit_price_target) && (() => {
+        const pt = layers.entry_price_target ?? layers.exit_price_target!;
+        const isEntry = !!layers.entry_price_target;
+        return (
+          <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <p className={`mb-1 text-xs font-semibold uppercase tracking-wider ${isEntry ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>
+              {isEntry ? "Entry target" : "Exit target"}
+            </p>
+            <div className="flex items-baseline gap-3">
+              <span className="font-mono text-2xl font-bold text-zinc-800 dark:text-zinc-100">
+                ${pt.price.toFixed(2)}
+              </span>
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">{pt.horizon}</span>
+            </div>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{pt.rationale}</p>
+          </div>
+        );
+      })()}
     </div>
   );
 }
