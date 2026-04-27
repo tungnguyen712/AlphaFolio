@@ -26,6 +26,7 @@ function groupBy(rels: RelatedCompany[]): Record<RelationshipKind, RelatedCompan
 
 const sourceLabel: Record<string, string> = {
   wikidata: "Wikidata",
+  wikipedia: "Wikipedia",
   "10k": "SEC 10-K",
   tavily: "News",
 };

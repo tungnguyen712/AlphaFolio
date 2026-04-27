@@ -33,14 +33,14 @@ _rate_limiter = AsyncRateLimiter(rps=0.5)
 
 
 def _key(ticker: str) -> str:
-    return make_cache_key("tavily.supply_chain", ticker=ticker.upper())
+    return make_cache_key("tavily.supply_chain.v2", ticker=ticker.upper())
 
 
 def _queries_for(ticker: str) -> list[str]:
     return [
-        f"{ticker} key suppliers sole source components semiconductor",
-        f"{ticker} major customers revenue concentration enterprise",
-        f"{ticker} contract manufacturer foundry supply chain",
+        f"{ticker} key business partners suppliers infrastructure",
+        f"{ticker} largest customers enterprise clients revenue deals",
+        f"{ticker} acquisitions subsidiaries owned companies",
     ]
 
 
