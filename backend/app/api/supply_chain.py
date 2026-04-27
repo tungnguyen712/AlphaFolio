@@ -29,7 +29,7 @@ async def get_supply_chain(
     if not upper.isalpha() or len(upper) > 10:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid ticker")
 
-    cache_key = make_cache_key("sc.report.v7", ticker=upper)
+    cache_key = make_cache_key("sc.report.v8", ticker=upper)
     if not refresh:
         cached = await cache_get(cache_key)
         if cached is not None:
