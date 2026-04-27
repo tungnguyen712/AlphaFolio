@@ -5,6 +5,4 @@ dockerfilePath = "Dockerfile"
 [deploy]
 preDeployCommand = "alembic upgrade head"
 startCommand = "sh /app/start.sh"
-healthcheckPath = "/health"
-healthcheckTimeout = 60
 restartPolicyType = "on_failure"
