@@ -558,7 +558,7 @@ def _extract_item_1a(raw_html: str) -> str:
 
 
 def _tenk_item1_key(ticker: str) -> str:
-    return make_cache_key("sec.10k.item1.v2", ticker=ticker.upper())
+    return make_cache_key("sec.10k.item1.v3", ticker=ticker.upper())
 
 
 @cached_fetch(key_fn=_tenk_item1_key, ttl_seconds=_DOCUMENT_TTL, rate_limiter=_rate_limiter)

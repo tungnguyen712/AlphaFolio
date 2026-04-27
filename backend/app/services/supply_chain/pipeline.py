@@ -118,6 +118,7 @@ async def _safe_10k(ticker: str) -> tuple[list[RelatedCompany], str | None, str 
         filing_url = raw.get("filing_url") or None
         filed_at = raw.get("filed_at") or None
         if not text:
+            logger.warning("10-K Item1 empty for %s filing_url=%s", ticker, filing_url)
             return [], filing_url, filed_at
         entities = await _cached_haiku_extract(ticker, text)
         rels: list[RelatedCompany] = []
