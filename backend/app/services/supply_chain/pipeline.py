@@ -6,8 +6,11 @@ enough to serve synchronously (<8s cold, <200ms cached).
 from __future__ import annotations
 
 import asyncio
+import logging
 import re
 from datetime import UTC, datetime
+
+logger = logging.getLogger(__name__)
 
 from app.models.agents.supply_chain import (
     ConfidenceLevel,
@@ -130,7 +133,8 @@ async def _safe_10k(ticker: str) -> tuple[list[RelatedCompany], str | None, str 
                 )
             )
         return rels, filing_url, filed_at
-    except Exception:
+    except Exception as exc:
+        logger.warning("10-K supply chain failed for %s: %s", ticker, exc, exc_info=True)
         return [], None, None
 
 
@@ -166,7 +170,8 @@ async def _safe_tavily(ticker: str) -> list[RelatedCompany]:
                 )
             )
         return rels
-    except Exception:
+    except Exception as exc:
+        logger.warning("Tavily supply chain failed for %s: %s", ticker, exc, exc_info=True)
         return []
 
 
