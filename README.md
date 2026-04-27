@@ -17,6 +17,12 @@ Multi-agent AI stock research and portfolio management platform. A LangGraph pip
 - Holdings management with rebalance triggers (macro event, lockup expiry, earnings date, drift threshold)
 - Research → Portfolio cross-link: BUY verdicts create pending positions; holdings link back to research reports
 
+**Supply Chain**
+- Descriptive relationship map for any ticker: suppliers, customers, manufacturers
+- 6 parallel data sources: GLEIF (regulatory parent/subsidiary structure), Wikidata, SEC 10-K Item 1, Wikipedia, SEC EDGAR Full-Text Search (EFTS), Tavily
+- Interactive React Flow graph view with dotted group boundaries per category and draggable nodes; cards view for detail
+- Results cached 24 h in Redis; no LLM call — pure extraction pipeline
+
 ## Agent Pipeline
 
 ```
@@ -36,9 +42,9 @@ Data retrieval and market intel run in parallel (LangGraph fan-out). The validat
 
 **Backend** — FastAPI (async) · SQLAlchemy 2.0 · asyncpg · LangGraph 0.2 · Celery + Redis · PostgreSQL 16 + pgvector · Anthropic SDK · Clerk JWT · LangSmith · Alembic · uv
 
-**Frontend** — Next.js 14 (App Router) · React 18 · TypeScript strict · Tailwind CSS · Clerk
+**Frontend** — Next.js 14 (App Router) · React 18 · TypeScript strict · Tailwind CSS · Clerk · @xyflow/react
 
-## Infrastructure (Designed For)
+## Infrastructure
 
 ```
 Vercel (Next.js) ──► ALB ──► ECS Cluster (Fargate)
@@ -52,44 +58,3 @@ ECR ──► ECS (shared image, CMD override per service)
 GitHub Actions ──► ECR push ──► alembic upgrade head ──► ecs update-service
 ```
 
-## Local Development
-
-**Prerequisites:** Docker + Docker Compose
-
-```bash
-cp .env.example .env        # fill in API keys
-docker compose up --build   # postgres + redis + backend + worker + beat + frontend
-```
-
-| Service | URL |
-|---------|-----|
-| Frontend | http://localhost:3000 |
-| Backend API | http://localhost:8000 |
-| API docs | http://localhost:8000/docs |
-| Health check | http://localhost:8000/health |
-
-**Inside backend container:**
-```bash
-docker compose exec backend uv run pytest -v
-docker compose exec backend uv run ruff check .
-docker compose exec backend uv run mypy app
-docker compose exec backend uv run alembic revision --autogenerate -m "your message"
-docker compose exec backend uv run alembic upgrade head
-```
-
-## Environment Variables
-
-Copy `.env.example` and fill in the required keys. Required for a working local run:
-
-| Variable | Description |
-|----------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://...` |
-| `ALEMBIC_DATABASE_URL` | `postgresql://...` (sync driver) |
-| `REDIS_URL` / `CELERY_BROKER_URL` / `CELERY_RESULT_BACKEND` | Redis connection strings |
-| `CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` / `CLERK_JWKS_URL` / `CLERK_ISSUER` | Clerk auth |
-| `ANTHROPIC_API_KEY` | Anthropic API |
-| `TAVILY_API_KEY` | News search |
-
-Optional (stubs used if absent):
-- `POLYGON_API_KEY` — falls back to fixtures in `tests/fixtures/polygon/`
-- `LANGCHAIN_API_KEY` + `LANGCHAIN_TRACING_V2=true` — LangSmith tracing
