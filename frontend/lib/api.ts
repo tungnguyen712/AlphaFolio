@@ -1,4 +1,4 @@
-import type { RunSseEvent } from "@/lib/types";
+import type { RunSseEvent, SupplyChainReport } from "@/lib/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -54,6 +54,30 @@ export function createApiClient(getToken: () => Promise<string | null>) {
       request<T>(path, getToken, { method: "PATCH", body: JSON.stringify(body) }),
     del: (path: string) => request<void>(path, getToken, { method: "DELETE" }),
   };
+}
+
+export async function getSupplyChain(
+  ticker: string,
+  getToken: () => Promise<string | null>,
+): Promise<SupplyChainReport> {
+  const token = await getToken();
+  const res = await fetch(`${BASE}/supply-chain/${ticker.toUpperCase()}`, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(res.status, detail);
+  }
+  return res.json() as Promise<SupplyChainReport>;
 }
 
 // SSE streaming via fetch — EventSource cannot set Authorization headers.

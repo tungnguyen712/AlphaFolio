@@ -3,6 +3,39 @@
 // ---------------------------------------------------------------------------
 
 export type ResearchSignal = "buy" | "hold" | "sell";
+
+// ---------------------------------------------------------------------------
+// Supply Chain
+// ---------------------------------------------------------------------------
+
+export type RelationshipKind =
+  | "supplier"
+  | "customer"
+  | "subsidiary"
+  | "parent"
+  | "manufacturer";
+export type ConfidenceLevel = "high" | "medium" | "low";
+
+export interface RelatedCompany {
+  name: string;
+  ticker: string | null;
+  relationship: RelationshipKind;
+  confidence: ConfidenceLevel;
+  sources: string[];
+  evidence_snippet: string | null;
+  research_url: string | null;
+}
+
+export interface SupplyChainReport {
+  ticker: string;
+  company_name: string;
+  generated_at: string;
+  relationships: RelatedCompany[];
+  filing_url: string | null;
+  filed_at: string | null;
+  data_sources_used: string[];
+  notes: string | null;
+}
 export type AgentRunFlow = "research" | "portfolio";
 export type AgentRunStatus = "queued" | "running" | "complete" | "failed";
 export type RiskProfile = "conservative" | "moderate" | "aggressive";

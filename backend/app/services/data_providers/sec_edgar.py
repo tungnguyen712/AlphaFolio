@@ -485,6 +485,9 @@ async def fetch_10k_excerpts(ticker: str) -> dict[str, Any]:
     }
 
 
+_ITEM_1_HEADER_RE = re.compile(
+    r"item\s*1\.?\s*(?:business)", re.IGNORECASE
+)
 _ITEM_1A_HEADER_RE = re.compile(
     r"item\s*1a\.?\s*risk\s*factors", re.IGNORECASE
 )
@@ -547,6 +550,65 @@ def _extract_item_1a(raw_html: str) -> str:
     start, end = min(candidates, key=lambda c: c[0])
     end = min(end, start + 4000)
     return text[start:end].strip()[:4000]
+
+
+# --------------------------------------------------------------------------
+# 10-K Item 1 Business section (supply chain: customers, suppliers, mfrs)
+# --------------------------------------------------------------------------
+
+
+def _tenk_item1_key(ticker: str) -> str:
+    return make_cache_key("sec.10k.item1", ticker=ticker.upper())
+
+
+@cached_fetch(key_fn=_tenk_item1_key, ttl_seconds=_DOCUMENT_TTL, rate_limiter=_rate_limiter)
+async def fetch_10k_item1_business(ticker: str) -> dict[str, Any]:
+    """Return {'business_excerpt': str, 'filing_url': str, 'filed_at': str, 'company_name': str}.
+
+    Fetches the most recent 10-K and extracts Item 1 "Business" section (truncated
+    to ~5000 chars). This section contains significant customer names, sole-source
+    suppliers, and manufacturing partner disclosures. Terminates at Item 1A.
+    """
+    company = await _resolve_cik(ticker)
+    cik = company["cik"]
+    cik_int = int(cik)
+    idx = await _fetch_filings_index(cik, form_type="10-K", lookback_days=400)
+
+    if not idx["filings"]:
+        return {
+            "business_excerpt": "",
+            "filing_url": "",
+            "filed_at": "",
+            "company_name": company.get("title", ticker),
+        }
+
+    latest = idx["filings"][0]
+    url = (
+        f"{_BASE_WWW}/Archives/edgar/data/{cik_int}/"
+        f"{latest['accession_nodash']}/{latest['primary_doc']}"
+    )
+    async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        raw_html = resp.text
+
+    excerpt = _extract_item1_business(raw_html)
+    return {
+        "business_excerpt": excerpt,
+        "filing_url": url,
+        "filed_at": latest["filed_at"],
+        "company_name": company.get("title", ticker),
+    }
+
+
+def _extract_item1_business(raw_html: str) -> str:
+    """Extract Item 1 Business section body, terminating at Item 1A.
+
+    Uses the same ToC-filtering heuristic as _extract_item_1a: requires a
+    substantial gap to Item 1A and a body starting with uppercase prose.
+    """
+    text = _strip_html(raw_html)
+    return _find_section(text, _ITEM_1_HEADER_RE, _ITEM_1A_HEADER_RE, max_chars=5000)
 
 
 # --------------------------------------------------------------------------

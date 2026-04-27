@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 AlphaFolio is a multi-agent stock research + portfolio tool. Two design rules govern every endpoint, graph, schema, and UI:
 
-1. **Two flows, not one.** Stock Research ("is this ticker worth holding?") and Portfolio Builder ("how should I allocate / review my portfolio?") are distinct user intents. Keep them separate even when they share agents underneath. Do not collapse them into a single pipeline.
+1. **Three flows, not one.** Stock Research ("is this ticker worth holding?"), Portfolio Builder ("how should I allocate / review my portfolio?"), and Supply Chain ("who are the related players?") are distinct user intents. Keep them separate. Do not collapse them into a single pipeline.
 2. **Every recommendation surface has three layers: verdict → top 3 signals → key uncertainty.** Bake these fields into the Pydantic output schema of any synthesis/recommendation agent; render them via a shared `VerdictCard` component. Reject any report model that omits one.
 3. **The flows cross-link.** Research → "Add to portfolio" feeds into the Portfolio graph. A Portfolio holding clicks through to Research with `portfolio_id` context. Rebalance triggers persist and fire notifications. The `rebalance_triggers`, `portfolio_position_pending`, and `research_reports.portfolio_id` columns exist specifically to support this loop — treat them as first-class, not v2.
 
@@ -135,6 +135,30 @@ These are live in production and must be preserved. Do not revert.
 - `railway.toml` at repo root — defines Dockerfile path and default start command
 - Beat must stay at exactly 1 replica always
 
+## Supply Chain flow (Stage 5.3, added 2026-04)
+
+A dedicated 3rd flow distinct from Research and Portfolio. **Descriptive, not a recommendation** — the verdict/top-3-signals/key-uncertainty rule does NOT apply here.
+
+**Architecture:** Simple async pipeline (no LangGraph). Three parallel fetches → merge → Haiku extraction → cached GET endpoint.
+
+**Data sources:**
+- Wikidata SPARQL (`app/services/data_providers/wikidata.py`) — subsidiaries (P355), parent org (P749). FREE. 30-day TTL.
+- SEC 10-K Item 1 Business section (`sec_edgar.fetch_10k_item1_business`) — "significant customers", "sole-source suppliers". FREE + ~$0.002 Haiku per extraction. 7-day TTL.
+- Tavily supply chain queries (`app/services/data_providers/tavily_supply_chain.py`) — fetched and cached; entity parsing deferred to v1.1.
+
+**V1 relationship types:** supplier, customer, manufacturer, parent, subsidiary
+
+**API:** `GET /supply-chain/{ticker}` — synchronous, cached 24h in `signal_cache`. No Celery, no SSE.
+
+**Frontend:** `/supply-chain` (search), `/supply-chain/[ticker]` (dashboard). Cross-links to Research per product rule 3.
+
+**Model:** `app/models/agents/supply_chain.py` — `RelatedCompany`, `SupplyChainReport`, `SupplyChainEntities`
+
+**V2 roadmap (implement after V1 stable in production):**
+1. Geography — `country: str | None` from Wikidata P17; display as flag in CompanyChip
+2. Dependency % — extract from 10-K Item 7 (MD&A); store as `dependency_pct: float | None`
+3. Numeric confidence score — replace `"high"|"medium"|"low"` with `float` (0.0–1.0); scoring: Wikidata=0.90, 10-K explicit+significant=0.80, 10-K unnamed=0.55, Tavily corroborated=0.40, Tavily-only=0.25
+
 ## Stage progression (updated 2026-04)
 
 All stages complete:
@@ -142,3 +166,4 @@ All stages complete:
 - Stage 5.0: Next.js 14 frontend fully wired — research flow, portfolio flow, VerdictCard, report rendering, SSE run progress
 - Stage 5.1: Pipeline quality — news filter, Form 4 aggregation + 10b5-1 detection, validation gate, valuation bridge, structured report sections
 - Stage 5.2: Deployment — Railway + Vercel, AWS ECS architecture documented in README
+- Stage 5.3: Supply Chain flow — 3rd flow, Wikidata + 10-K Item 1 + Tavily, `GET /supply-chain/{ticker}`, frontend at `/supply-chain/[ticker]`
