@@ -98,7 +98,10 @@ export function VerdictCard({ layers, signal, ticker }: VerdictCardProps) {
               </span>
               <span className="text-sm text-zinc-500 dark:text-zinc-400">{pt.horizon}</span>
             </div>
-            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{pt.rationale}</p>
+<p className="mt-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
+              Why this target
+            </p>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{pt.rationale}</p>
           </div>
         );
       })()}

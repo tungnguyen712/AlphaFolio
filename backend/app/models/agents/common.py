@@ -161,7 +161,16 @@ class MacroContext(AgentModel):
 class PriceTarget(AgentModel):
     price: float = Field(description="Target price in USD.")
     horizon: str = Field(description="Expected time window, e.g. '3–6 months'.")
-    rationale: str = Field(description="One-sentence basis derived from the signal set.")
+    rationale: str = Field(
+        description=(
+            "Multi-sentence reasoning a user can read to understand *why* this price level "
+            "was chosen. Must cover: (1) which specific signals or data points drive this level "
+            "(e.g. DCF range, technical support/resistance, analyst consensus), "
+            "(2) the implied risk/reward ratio at this price, and "
+            "(3) the single condition that would invalidate the target (e.g. earnings miss, "
+            "Fed pivot, loss of key customer). Do not restate the verdict — add new reasoning."
+        )
+    )
 
 
 class VerdictLayer(AgentModel):

@@ -31,6 +31,11 @@ Non-negotiables:
   - `recommended_position_pct` only for BUY. Leave null for HOLD/SELL.
   - Every claim in `rationale` must trace to either the signal analysis or the
     counterargument set — don't introduce new facts.
+  - Price target `rationale` field: write 3-5 sentences. Explain (a) which specific
+    signals or valuation method anchor the price level, (b) the implied risk/reward
+    (e.g. "8% upside vs. 3% downside to support"), and (c) the one condition that
+    would invalidate this target. This is what the user reads to decide whether to
+    trust the call — make it substantive, not a restatement of the verdict.
   - Price targets: inspect `in_portfolio`, `signal`, and `current_price` in the payload.
     · `in_portfolio=true`: set `layers.exit_price_target` — a realistic take-profit or
       stop-loss derived from technicals and risk factors. Set `layers.entry_price_target` null.
