@@ -1,9 +1,11 @@
 "use client";
 
 import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useSupplyChain } from "@/hooks/useSupplyChain";
 import { RelationshipGroup } from "@/components/supply-chain/RelationshipGroup";
+import { SupplyChainGraph } from "@/components/supply-chain/SupplyChainGraph";
 import { Spinner } from "@/components/ui/Spinner";
 import type { RelatedCompany, RelationshipKind } from "@/lib/types";
 
@@ -25,17 +27,36 @@ function groupBy(rels: RelatedCompany[]): Record<RelationshipKind, RelatedCompan
 }
 
 const sourceLabel: Record<string, string> = {
+  gleif: "GLEIF",
   wikidata: "Wikidata",
   wikipedia: "Wikipedia",
   "10k": "SEC 10-K",
+  sec_efts: "SEC EFTS",
   tavily: "News",
 };
+
+type ViewMode = "card" | "graph";
+
+const VIEW_KEY = "sc-view";
 
 export default function SupplyChainTicker() {
   const params = useParams();
   const router = useRouter();
   const ticker = (params.ticker as string).toUpperCase();
   const { data, loading, error, notFound } = useSupplyChain(ticker);
+
+  const [viewMode, setViewMode] = useState<ViewMode>("card");
+
+  // Initialise from localStorage after hydration
+  useEffect(() => {
+    const stored = localStorage.getItem(VIEW_KEY);
+    if (stored === "card" || stored === "graph") setViewMode(stored);
+  }, []);
+
+  function switchView(mode: ViewMode) {
+    setViewMode(mode);
+    localStorage.setItem(VIEW_KEY, mode);
+  }
 
   if (loading) {
     return (
@@ -125,32 +146,57 @@ export default function SupplyChainTicker() {
         </div>
       </div>
 
-      {/* Relationship groups */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {GROUP_CONFIG.map(({ kind, title, empty }) => (
-          <RelationshipGroup
-            key={kind}
-            title={title}
-            relationships={grouped[kind]}
-            emptyMessage={empty}
-          />
-        ))}
+      {/* View toggle */}
+      <div className="mb-4 flex items-center gap-2">
+        <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 dark:border-zinc-700 dark:bg-zinc-900">
+          {(["card", "graph"] as const).map((mode) => (
+            <button
+              key={mode}
+              onClick={() => switchView(mode)}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                viewMode === mode
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              {mode === "card" ? "Cards" : "Graph"}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Confidence legend */}
-      <div className="mt-6 flex items-center gap-4 text-xs text-zinc-400 dark:text-zinc-500">
-        <span className="font-medium">Confidence:</span>
-        {(["high", "medium", "low"] as const).map((c) => (
-          <span key={c} className="flex items-center gap-1">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                c === "high" ? "bg-green-500" : c === "medium" ? "bg-yellow-400" : "bg-zinc-400"
-              }`}
+      {/* Relationship view */}
+      {viewMode === "graph" ? (
+        <SupplyChainGraph report={data} />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {GROUP_CONFIG.map(({ kind, title, empty }) => (
+            <RelationshipGroup
+              key={kind}
+              title={title}
+              relationships={grouped[kind]}
+              emptyMessage={empty}
             />
-            {c.charAt(0).toUpperCase() + c.slice(1)}
-          </span>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
+
+      {/* Confidence legend — card view only */}
+      {viewMode === "card" && (
+        <div className="mt-6 flex items-center gap-4 text-xs text-zinc-400 dark:text-zinc-500">
+          <span className="font-medium">Confidence:</span>
+          {(["high", "medium", "low"] as const).map((c) => (
+            <span key={c} className="flex items-center gap-1">
+              <span
+                className={`h-2 w-2 rounded-full ${
+                  c === "high" ? "bg-green-500" : c === "medium" ? "bg-yellow-400" : "bg-zinc-400"
+                }`}
+              />
+              {c.charAt(0).toUpperCase() + c.slice(1)}
+            </span>
+          ))}
+        </div>
+      )}
 
       {data.notes && (
         <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500">{data.notes}</p>
