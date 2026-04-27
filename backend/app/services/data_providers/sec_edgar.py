@@ -558,7 +558,7 @@ def _extract_item_1a(raw_html: str) -> str:
 
 
 def _tenk_item1_key(ticker: str) -> str:
-    return make_cache_key("sec.10k.item1.v3", ticker=ticker.upper())
+    return make_cache_key("sec.10k.item1.v7", ticker=ticker.upper())
 
 
 @cached_fetch(key_fn=_tenk_item1_key, ttl_seconds=_DOCUMENT_TTL, rate_limiter=_rate_limiter)
@@ -633,8 +633,8 @@ def _extract_item1_business(raw_html: str) -> str:
     if best_start is None:
         return ""
 
-    end = min(best_end, best_start + 5000) if best_end is not None else (best_start + 5000)
-    return text[best_start:end].strip()[:5000]
+    end = min(best_end, best_start + 60000) if best_end is not None else (best_start + 60000)
+    return text[best_start:end].strip()[:60000]
 
 
 # --------------------------------------------------------------------------

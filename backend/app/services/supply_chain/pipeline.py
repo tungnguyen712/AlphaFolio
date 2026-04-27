@@ -74,7 +74,7 @@ def _normalize_name(name: str) -> str:
 
 
 async def _cached_haiku_extract(ticker: str, text: str) -> SupplyChainEntities:
-    key = make_cache_key("sc.10k.haiku.v3", ticker=ticker.upper())
+    key = make_cache_key("sc.10k.haiku.v7", ticker=ticker.upper())
     cached = await cache_get(key)
     if cached is not None:
         return SupplyChainEntities.model_validate(cached)

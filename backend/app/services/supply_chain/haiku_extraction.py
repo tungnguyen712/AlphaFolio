@@ -53,14 +53,14 @@ Rules:
 async def extract_supply_chain_from_10k(item1_text: str, ticker: str) -> SupplyChainEntities:
     user = (
         f"Extract supply chain relationships for {ticker} from this "
-        f"10-K Item 1 Business section:\n\n{item1_text[:4500]}"
+        f"10-K Item 1 Business section:\n\n{item1_text[:55000]}"
     )
     return await call_structured(
         tier=AgentTier.HAIKU,
         system=_SYSTEM,
         user=user,
         output_model=SupplyChainEntities,
-        max_tokens=2048,
+        max_tokens=4096,
     )
 
 
