@@ -58,3 +58,14 @@ ECR ──► ECS (shared image, CMD override per service)
 GitHub Actions ──► ECR push ──► alembic upgrade head ──► ecs update-service
 ```
 
+## Observability
+
+LangSmith traces every LangGraph execution end-to-end.
+
+| What is captured | Where |
+|---|---|
+| Every agent node input/output (JSON) | LangSmith run tree |
+| Per-node latency and token counts | LangSmith run tree |
+| `langsmith_trace_id` stored on `agent_runs` row | Postgres — links DB record → LangSmith UI |
+| Full `graph_state` checkpoint (LangGraph) | `agent_runs.graph_state` JSONB |
+
