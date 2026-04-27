@@ -47,3 +47,39 @@ async def extract_supply_chain_from_10k(item1_text: str, ticker: str) -> SupplyC
         output_model=SupplyChainEntities,
         max_tokens=1024,
     )
+
+
+_TAVILY_SYSTEM = """\
+You are a financial data extractor. Given news article snippets about a company, \
+extract any supply chain relationships that are explicitly mentioned.
+
+For each relationship, provide:
+- name: the specific company name (not generic descriptions like "cloud providers")
+- relationship: one of "supplier", "customer", "manufacturer"
+- evidence_snippet: a direct quote from the snippets (max 150 chars)
+- is_significant: true if described as "key", "major", "primary", "sole", or "largest"
+
+Only extract relationships where a specific company NAME is mentioned. \
+Omit generic references without names. Omit the target company itself.\
+"""
+
+
+async def extract_supply_chain_from_tavily(snippets: list[dict], ticker: str) -> SupplyChainEntities:
+    if not snippets:
+        return SupplyChainEntities(entities=[])
+
+    combined = "\n\n".join(
+        f"[{s.get('headline', '')}]\n{s.get('snippet', '')}"
+        for s in snippets[:10]
+    )
+    user = (
+        f"Extract supply chain relationships for {ticker} from these news snippets:\n\n"
+        f"{combined[:3500]}"
+    )
+    return await call_structured(
+        tier=AgentTier.HAIKU,
+        system=_TAVILY_SYSTEM,
+        user=user,
+        output_model=SupplyChainEntities,
+        max_tokens=512,
+    )

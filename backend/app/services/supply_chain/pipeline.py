@@ -27,9 +27,13 @@ from app.services.data_providers.sec_edgar import (
 )
 from app.services.data_providers.tavily_supply_chain import fetch_supply_chain_data
 from app.services.data_providers.wikidata import fetch_wikidata_relationships
-from app.services.supply_chain.haiku_extraction import extract_supply_chain_from_10k
+from app.services.supply_chain.haiku_extraction import (
+    extract_supply_chain_from_10k,
+    extract_supply_chain_from_tavily,
+)
 
-_HAIKU_CACHE_TTL = 7 * 24 * 60 * 60  # 7 days — matches 10-K document TTL
+_HAIKU_CACHE_TTL = 7 * 24 * 60 * 60   # 7 days — matches 10-K document TTL
+_TAVILY_HAIKU_TTL = 24 * 60 * 60      # 24 hours — matches Tavily fetch TTL
 
 _LEGAL_SUFFIX_RE = re.compile(
     r"\s+(?:inc|corp|ltd|llc|co|company|group|holdings?|international|"
@@ -51,7 +55,7 @@ def _normalize_name(name: str) -> str:
 
 
 async def _cached_haiku_extract(ticker: str, text: str) -> SupplyChainEntities:
-    key = make_cache_key("sc.10k.haiku", ticker=ticker.upper())
+    key = make_cache_key("sc.10k.haiku.v2", ticker=ticker.upper())
     cached = await cache_get(key)
     if cached is not None:
         return SupplyChainEntities.model_validate(cached)
@@ -114,12 +118,40 @@ async def _safe_10k(ticker: str) -> tuple[list[RelatedCompany], str | None, str 
         return [], None, None
 
 
-async def _safe_tavily(ticker: str) -> None:
-    """Fetches and caches Tavily supply chain snippets for future v1.1 parsing."""
+async def _cached_tavily_extract(ticker: str, snippets: list[dict]) -> SupplyChainEntities:
+    key = make_cache_key("sc.tavily.haiku", ticker=ticker.upper())
+    cached = await cache_get(key)
+    if cached is not None:
+        return SupplyChainEntities.model_validate(cached)
+    result = await extract_supply_chain_from_tavily(snippets, ticker)
+    await cache_set(key, result.model_dump(mode="json"), _TAVILY_HAIKU_TTL)
+    return result
+
+
+async def _safe_tavily(ticker: str) -> list[RelatedCompany]:
+    """Fetch Tavily supply chain snippets and extract entities via Haiku."""
     try:
-        await fetch_supply_chain_data(ticker)
+        data = await fetch_supply_chain_data(ticker)
+        snippets = data.get("snippets", [])
+        if not snippets:
+            return []
+        entities = await _cached_tavily_extract(ticker, snippets)
+        rels: list[RelatedCompany] = []
+        for e in entities.entities:
+            if e.relationship not in ("supplier", "customer", "manufacturer"):
+                continue
+            rels.append(
+                RelatedCompany(
+                    name=e.name,
+                    relationship=e.relationship,
+                    confidence="low",  # news-reported, not primary source
+                    sources=["tavily"],
+                    evidence_snippet=e.evidence_snippet[:200] if e.evidence_snippet else None,
+                )
+            )
+        return rels
     except Exception:
-        pass
+        return []
 
 
 # --------------------------------------------------------------------------
@@ -130,15 +162,16 @@ async def _safe_tavily(ticker: str) -> None:
 def _merge_and_deduplicate(
     wikidata_rels: list[RelatedCompany],
     tenk_rels: list[RelatedCompany],
+    tavily_rels: list[RelatedCompany],
 ) -> list[RelatedCompany]:
-    """Merge two sources with priority: wikidata > 10k.
+    """Merge three sources with priority: wikidata > 10k > tavily.
 
     Dedup key: (normalized_name, relationship). On collision, keep the
     higher-priority entry's fields but merge the sources list.
     """
     seen: dict[tuple[str, str], tuple[int, RelatedCompany]] = {}
 
-    for priority, rels in ((0, wikidata_rels), (1, tenk_rels)):
+    for priority, rels in ((0, wikidata_rels), (1, tenk_rels), (2, tavily_rels)):
         for rel in rels:
             key = (_normalize_name(rel.name), rel.relationship)
             existing_priority, existing_rel = seen.get(key, (999, None))  # type: ignore[assignment]
@@ -182,7 +215,7 @@ async def run_supply_chain(ticker: str) -> SupplyChainReport:
     except LookupError:
         company_name = upper
 
-    tenk_result, wikidata_result, _ = await asyncio.gather(
+    tenk_result, wikidata_result, tavily_rels = await asyncio.gather(
         _safe_10k(upper),
         _safe_wikidata(company_name),
         _safe_tavily(upper),
@@ -191,7 +224,7 @@ async def run_supply_chain(ticker: str) -> SupplyChainReport:
     tenk_rels, filing_url, filed_at = tenk_result
     wikidata_rels = wikidata_result
 
-    all_rels = _merge_and_deduplicate(wikidata_rels, tenk_rels)
+    all_rels = _merge_and_deduplicate(wikidata_rels, tenk_rels, tavily_rels)
 
     # Attempt ticker resolution for up to 5 high-confidence entries without tickers.
     unresolved_high = [r for r in all_rels if r.confidence == "high" and not r.ticker][:5]
@@ -220,6 +253,8 @@ async def run_supply_chain(ticker: str) -> SupplyChainReport:
         data_sources.append("wikidata")
     if tenk_rels:
         data_sources.append("10k")
+    if tavily_rels:
+        data_sources.append("tavily")
 
     return SupplyChainReport(
         ticker=upper,

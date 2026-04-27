@@ -558,7 +558,7 @@ def _extract_item_1a(raw_html: str) -> str:
 
 
 def _tenk_item1_key(ticker: str) -> str:
-    return make_cache_key("sec.10k.item1", ticker=ticker.upper())
+    return make_cache_key("sec.10k.item1.v2", ticker=ticker.upper())
 
 
 @cached_fetch(key_fn=_tenk_item1_key, ttl_seconds=_DOCUMENT_TTL, rate_limiter=_rate_limiter)
@@ -604,11 +604,37 @@ async def fetch_10k_item1_business(ticker: str) -> dict[str, Any]:
 def _extract_item1_business(raw_html: str) -> str:
     """Extract Item 1 Business section body, terminating at Item 1A.
 
-    Uses the same ToC-filtering heuristic as _extract_item_1a: requires a
-    substantial gap to Item 1A and a body starting with uppercase prose.
+    Picks the 'Item 1. Business' start with the LARGEST gap to the next
+    'Item 1A' occurrence — this reliably selects the real body section over
+    ToC entries (tiny gap) and cross-references ("See Item 1A. Risk Factors"
+    embedded in body prose, medium gap).
     """
     text = _strip_html(raw_html)
-    return _find_section(text, _ITEM_1_HEADER_RE, _ITEM_1A_HEADER_RE, max_chars=5000)
+
+    starts = list(_ITEM_1_HEADER_RE.finditer(text))
+    if not starts:
+        return ""
+
+    ends = [m.start() for m in _ITEM_1A_HEADER_RE.finditer(text)]
+
+    best_start: int | None = None
+    best_end: int | None = None
+    best_gap = -1
+
+    for m in starts:
+        s = m.end()
+        following_end = next((e for e in ends if e > s), None)
+        gap = (following_end - s) if following_end is not None else (len(text) - s)
+        if gap > best_gap:
+            best_gap = gap
+            best_start = s
+            best_end = following_end
+
+    if best_start is None:
+        return ""
+
+    end = min(best_end, best_start + 5000) if best_end is not None else (best_start + 5000)
+    return text[best_start:end].strip()[:5000]
 
 
 # --------------------------------------------------------------------------

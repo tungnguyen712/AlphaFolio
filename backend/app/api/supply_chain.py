@@ -23,15 +23,17 @@ async def get_supply_chain(
     ticker: str,
     user: CurrentUserDep,
     db: DBSessionDep,
+    refresh: bool = False,
 ) -> SupplyChainReport:
     upper = ticker.upper().strip()
     if not upper.isalpha() or len(upper) > 10:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="invalid ticker")
 
-    cache_key = make_cache_key("sc.report", ticker=upper)
-    cached = await cache_get(cache_key)
-    if cached is not None:
-        return SupplyChainReport.model_validate(cached)
+    cache_key = make_cache_key("sc.report.v2", ticker=upper)
+    if not refresh:
+        cached = await cache_get(cache_key)
+        if cached is not None:
+            return SupplyChainReport.model_validate(cached)
 
     report = await run_supply_chain(upper)
 
