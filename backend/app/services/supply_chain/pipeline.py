@@ -42,11 +42,27 @@ _LEGAL_SUFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Known abbreviation → canonical normalized name.
+# Applied after legal-suffix stripping so lookups are lowercase, suffix-free.
+_ALIASES: dict[str, str] = {
+    "tsmc": "taiwan semiconductor",
+    "taiwan semiconductor manufacturing": "taiwan semiconductor",
+    "taiwan semiconductor manufacturing company": "taiwan semiconductor",
+    "samsung": "samsung electronics",
+    "globalfoundries": "global foundries",
+    "gf": "global foundries",
+    "arm": "arm holdings",
+    "asml": "asml holding",
+    "foxconn": "hon hai precision",
+    "apple": "apple",  # prevent "apple inc" != "apple"
+}
+
 
 def _normalize_name(name: str) -> str:
     name = name.strip().lower()
     name = _LEGAL_SUFFIX_RE.sub("", name).strip()
-    return name
+    # Resolve known aliases to a canonical form.
+    return _ALIASES.get(name, name)
 
 
 # --------------------------------------------------------------------------
@@ -55,7 +71,7 @@ def _normalize_name(name: str) -> str:
 
 
 async def _cached_haiku_extract(ticker: str, text: str) -> SupplyChainEntities:
-    key = make_cache_key("sc.10k.haiku.v2", ticker=ticker.upper())
+    key = make_cache_key("sc.10k.haiku.v3", ticker=ticker.upper())
     cached = await cache_get(key)
     if cached is not None:
         return SupplyChainEntities.model_validate(cached)

@@ -17,15 +17,30 @@ SEC 10-K annual filing, extract all explicitly mentioned company relationships.
 For each entity found, provide:
 - name: the company or entity name exactly as written in the filing
 - relationship: one of:
-    "supplier"     – provides materials, components, or services to the filer
-    "customer"     – buys products or services from the filer
-    "manufacturer" – manufactures products on behalf of the filer (foundry, ODM)
+    "supplier"     – provides raw materials, components, IP, or non-manufacturing
+                     services to the filer (e.g. memory chips, licensing)
+    "customer"     – buys products or services from the filer; named accounts or
+                     named customer categories with a specific revenue concentration %
+    "manufacturer" – FABRICATES or MANUFACTURES finished products or wafers on behalf
+                     of the filer under a contract manufacturing / foundry / ODM model.
+                     THIS INCLUDES: semiconductor foundries (TSMC, Samsung foundry,
+                     GlobalFoundries), ODMs, EMS providers (Foxconn, Flextronics).
+                     USE THIS even if the filing says "supply" or "outsourced" —
+                     if the company is making/fabricating the end product, it is a
+                     manufacturer, not a supplier.
     "subsidiary"   – owned or controlled by the filer
     "parent"       – owns or controls the filer
 - evidence_snippet: a direct verbatim quote from the text (max 150 characters) \
 showing this relationship
 - is_significant: true if the text uses "significant", "sole-source", "primary", \
 "key", "principal", "major", "concentrated", or discloses a specific revenue/supply %
+
+CRITICAL RULE — manufacturer vs supplier:
+  If a company FABRICATES CHIPS, WAFERS, or FINISHED HARDWARE for the filer
+  (e.g. "manufactured by TSMC", "fab partner", "foundry services", "wafer supply
+  from [company] under manufacturing agreement"), classify as "manufacturer" ALWAYS.
+  Only use "supplier" for companies providing raw inputs (substrates, gases,
+  photomasks, memory, IP cores) that are NOT doing end-product fabrication.
 
 Rules:
 - Only extract relationships explicitly stated — do not infer or guess.
