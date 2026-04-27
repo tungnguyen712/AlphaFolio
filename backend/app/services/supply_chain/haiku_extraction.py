@@ -60,7 +60,7 @@ async def extract_supply_chain_from_10k(item1_text: str, ticker: str) -> SupplyC
         system=_SYSTEM,
         user=user,
         output_model=SupplyChainEntities,
-        max_tokens=1024,
+        max_tokens=2048,
     )
 
 
@@ -103,5 +103,5 @@ async def extract_supply_chain_from_tavily(snippets: list[dict], ticker: str) ->
         system=_TAVILY_SYSTEM,
         user=user,
         output_model=SupplyChainEntities,
-        max_tokens=512,
+        max_tokens=1024,
     )
