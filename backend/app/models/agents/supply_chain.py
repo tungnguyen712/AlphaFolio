@@ -14,7 +14,7 @@ class RelatedCompany(BaseModel):
     ticker: str | None = None
     relationship: RelationshipKind
     confidence: ConfidenceLevel
-    sources: list[Literal["wikidata", "10k", "tavily", "wikipedia"]]
+    sources: list[Literal["gleif", "wikidata", "10k", "sec_efts", "tavily", "wikipedia"]]
     evidence_snippet: str | None = None
     research_url: str | None = None  # /research?ticker=X — cross-link to Research flow
 

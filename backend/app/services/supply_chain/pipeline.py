@@ -1,8 +1,7 @@
-"""Supply chain pipeline — orchestrates Wikidata + Wikipedia + 10-K + Tavily into SupplyChainReport.
+"""Supply chain pipeline — orchestrates GLEIF + Wikidata + Wikipedia + 10-K + EFTS + Tavily into SupplyChainReport.
 
-No LangGraph: four parallel async fetches then merge. The result is fast
-enough to serve synchronously (<10s cold, <200ms cached).
-"""
+No LangGraph: six parallel async fetches then merge. The result is fast
+enough to serve synchronously (<12s cold, <200ms cached)."""
 from __future__ import annotations
 
 import asyncio
@@ -28,6 +27,8 @@ from app.services.data_providers.sec_edgar import (
     fetch_10k_item1_business,
     resolve_ticker_from_name,
 )
+from app.services.data_providers.gleif import fetch_gleif_relationships
+from app.services.data_providers.sec_efts import fetch_efts_customers
 from app.services.data_providers.tavily_supply_chain import fetch_supply_chain_data
 from app.services.data_providers.wikidata import fetch_wikidata_relationships
 from app.services.data_providers.wikipedia import fetch_wikipedia_text
@@ -192,6 +193,57 @@ async def _safe_wikipedia(company_name: str, ticker: str) -> list[RelatedCompany
         return []
 
 
+async def _safe_gleif(company_name: str) -> list[RelatedCompany]:
+    """Fetch GLEIF regulatory parent/subsidiary structure. Never raises."""
+    try:
+        data = await fetch_gleif_relationships(company_name)
+        rels: list[RelatedCompany] = []
+        for e in data.get("entities", []):
+            rel_type = e.get("relationship")
+            if rel_type not in ("subsidiary", "parent"):
+                continue
+            rels.append(
+                RelatedCompany(
+                    name=e["name"],
+                    relationship=rel_type,
+                    confidence="high",  # GLEIF is a regulatory database
+                    sources=["gleif"],
+                )
+            )
+        return rels
+    except Exception as exc:
+        logger.warning("GLEIF supply chain failed for %s: %s", company_name, exc, exc_info=True)
+        return []
+
+
+async def _safe_efts(company_name: str) -> list[RelatedCompany]:
+    """Fetch SEC EFTS cross-filer customer mentions. Never raises."""
+    try:
+        data = await fetch_efts_customers(company_name)
+        # Normalize the target name once for self-reference filtering.
+        target_norm = _normalize_name(company_name)
+        rels: list[RelatedCompany] = []
+        for c in data.get("customers", []):
+            name = c.get("name", "").strip()
+            if not name:
+                continue
+            # Skip self-references (the company appears in its own filing index).
+            if _normalize_name(name) == target_norm:
+                continue
+            rels.append(
+                RelatedCompany(
+                    name=name,
+                    relationship="customer",
+                    confidence="medium",  # inferred from 10-K mention, not self-reported
+                    sources=["sec_efts"],
+                )
+            )
+        return rels
+    except Exception as exc:
+        logger.warning("SEC EFTS failed for %s: %s", company_name, exc, exc_info=True)
+        return []
+
+
 async def _safe_tavily(ticker: str) -> list[RelatedCompany]:
     """Fetch Tavily supply chain snippets and extract entities via Haiku."""
     try:
@@ -225,12 +277,14 @@ async def _safe_tavily(ticker: str) -> list[RelatedCompany]:
 
 
 def _merge_and_deduplicate(
+    gleif_rels: list[RelatedCompany],
     wikidata_rels: list[RelatedCompany],
-    wiki_rels: list[RelatedCompany],
     tenk_rels: list[RelatedCompany],
+    wiki_rels: list[RelatedCompany],
+    efts_rels: list[RelatedCompany],
     tavily_rels: list[RelatedCompany],
 ) -> list[RelatedCompany]:
-    """Merge four sources with priority: wikidata > wikipedia > 10k > tavily.
+    """Merge six sources with priority: gleif > wikidata > 10k > wikipedia > sec_efts > tavily.
 
     Dedup key: (normalized_name, relationship). On collision, keep the
     higher-priority entry's fields but merge the sources list.
@@ -238,10 +292,12 @@ def _merge_and_deduplicate(
     seen: dict[tuple[str, str], tuple[int, RelatedCompany]] = {}
 
     for priority, rels in (
-        (0, wikidata_rels),
-        (1, wiki_rels),
+        (0, gleif_rels),
+        (1, wikidata_rels),
         (2, tenk_rels),
-        (3, tavily_rels),
+        (3, wiki_rels),
+        (4, efts_rels),
+        (5, tavily_rels),
     ):
         for rel in rels:
             key = (_normalize_name(rel.name), rel.relationship)
@@ -277,7 +333,7 @@ async def _try_resolve_ticker(name: str) -> str | None:
 
 
 async def run_supply_chain(ticker: str) -> SupplyChainReport:
-    """Orchestrate Wikidata + Wikipedia + 10-K + Tavily → SupplyChainReport."""
+    """Orchestrate GLEIF + Wikidata + 10-K + Wikipedia + EFTS + Tavily → SupplyChainReport."""
     upper = ticker.upper()
 
     try:
@@ -286,16 +342,27 @@ async def run_supply_chain(ticker: str) -> SupplyChainReport:
     except LookupError:
         company_name = upper
 
-    tenk_result, wikidata_rels, wiki_rels, tavily_rels = await asyncio.gather(
+    (
+        tenk_result,
+        gleif_rels,
+        wikidata_rels,
+        wiki_rels,
+        efts_rels,
+        tavily_rels,
+    ) = await asyncio.gather(
         _safe_10k(upper),
+        _safe_gleif(company_name),
         _safe_wikidata(company_name),
         _safe_wikipedia(company_name, upper),
+        _safe_efts(company_name),
         _safe_tavily(upper),
     )
 
     tenk_rels, filing_url, filed_at = tenk_result
 
-    all_rels = _merge_and_deduplicate(wikidata_rels, wiki_rels, tenk_rels, tavily_rels)
+    all_rels = _merge_and_deduplicate(
+        gleif_rels, wikidata_rels, tenk_rels, wiki_rels, efts_rels, tavily_rels
+    )
 
     # Attempt ticker resolution for up to 5 high/medium confidence entries without tickers.
     unresolved = [r for r in all_rels if r.confidence in ("high", "medium") and not r.ticker][:5]
@@ -318,12 +385,16 @@ async def run_supply_chain(ticker: str) -> SupplyChainReport:
     ]
 
     data_sources: list[str] = []
+    if gleif_rels:
+        data_sources.append("gleif")
     if wikidata_rels:
         data_sources.append("wikidata")
-    if wiki_rels:
-        data_sources.append("wikipedia")
     if tenk_rels:
         data_sources.append("10k")
+    if wiki_rels:
+        data_sources.append("wikipedia")
+    if efts_rels:
+        data_sources.append("sec_efts")
     if tavily_rels:
         data_sources.append("tavily")
 
