@@ -18,8 +18,10 @@ section. Until then, no Anthropic call is made.
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 from typing import Any
 
+from app.config import get_settings
 from app.models.agents import (
     BusinessOverviewExcerpt,
     CongressTrade,
@@ -31,9 +33,9 @@ from app.models.agents import (
     RiskFactorsExcerpt,
     VolumeAnomaly,
 )
-from app.config import get_settings
 from app.services.data_providers import polygon_prices, polygon_stub, quiver_stub, sec_edgar, yahoo_prices
 from app.services.data_providers.polygon_stub import PolygonFixtureMissingError
+from app.services.data_providers.sec_edgar import aggregate_insider_transactions
 
 
 async def run(inputs: DataRetrievalInput) -> DataRetrievalOutput:
@@ -83,12 +85,14 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
     volume_anomalies = [
         VolumeAnomaly.model_validate(v) for v in polygon.get("volume_anomalies", [])
     ]
+    insider_filings = [InsiderTransaction.model_validate(t) for t in form4["insider_filings"]]
+    insider_summary = aggregate_insider_transactions(insider_filings)
 
     return DataRetrievalOutput(
         ticker=ticker,
         mode="public",
         lookback_days=lookback,
-        insider_filings=[InsiderTransaction.model_validate(t) for t in form4["insider_filings"]],
+        insider_filings=insider_filings,
         congress_trades=[CongressTrade.model_validate(t) for t in congress],
         price_summary=price_summary,
         volume_anomalies=volume_anomalies,
@@ -98,6 +102,7 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
             filed_at=tenk.get("filed_at") or None,
         ),
         business_overview=None,
+        insider_summary=insider_summary,
     )
 
 
@@ -211,4 +216,9 @@ def _price_summary(polygon: dict[str, Any]) -> PriceSummary | None:
     raw = polygon.get("price_series")
     if not raw:
         return None
-    return PriceSummary.model_validate(raw)
+    ps = PriceSummary.model_validate(raw)
+    missing = [
+        f for f in ("high_52w", "low_52w", "market_cap", "forward_pe", "ev_revenue")
+        if getattr(ps, f, None) is None
+    ]
+    return ps.model_copy(update={"missing_fields": missing, "retrieved_at": date.today()})

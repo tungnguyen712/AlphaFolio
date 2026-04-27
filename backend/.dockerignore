@@ -1,10 +1,9 @@
+.env
+.env.*
 __pycache__
 *.pyc
 .pytest_cache
-.mypy_cache
 .ruff_cache
-.venv
-venv
-.env
-.env.local
-tests/fixtures/.cache
+.mypy_cache
+.git
+.gitignore

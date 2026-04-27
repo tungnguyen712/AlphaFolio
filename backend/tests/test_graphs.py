@@ -42,6 +42,8 @@ from app.models.db.enums import AssetClass, ResearchSignal, RiskProfile
 
 
 def _fake_retrieved() -> DataRetrievalOutput:
+    from app.models.agents.common import InsiderSummary
+
     return DataRetrievalOutput(
         ticker="NVDA",
         lookback_days=90,
@@ -50,6 +52,7 @@ def _fake_retrieved() -> DataRetrievalOutput:
         price_summary=None,
         volume_anomalies=[],
         risk_factors=RiskFactorsExcerpt(text="", filing_url=None, filed_at=None),
+        insider_summary=InsiderSummary(),
     )
 
 
@@ -107,6 +110,10 @@ def _fake_synthesis() -> SynthesisOutput:
         rationale="Bull and bear roughly balanced.",
         recommended_position_pct=None,
         sources=[SourceRef(kind="sec_filing", label="NVDA 10-K 2026-02")],
+        valuation_bridge=None,
+        confidence_breakdown=None,
+        validation_result=None,
+        insider_summary=None,
     )
 
 
@@ -138,7 +145,9 @@ def _fake_portfolio_rec(portfolio_id: str) -> PortfolioConstructionOutput:
 # ---------------------------------------------------------------------------
 
 
-async def test_research_graph_runs_all_five_nodes() -> None:
+async def test_research_graph_runs_all_six_nodes() -> None:
+    from app.models.agents.synthesis import ValidationResult, ValuationBridge
+
     with (
         patch(
             "app.graphs.research.data_retrieval.run",
@@ -157,6 +166,14 @@ async def test_research_graph_runs_all_five_nodes() -> None:
             AsyncMock(return_value=_fake_devils_advocate()),
         ),
         patch(
+            "app.graphs.research._validation_svc.validate_research_inputs",
+            return_value=ValidationResult(),
+        ),
+        patch(
+            "app.graphs.research._valuation_svc.build_valuation_bridge",
+            return_value=ValuationBridge(),
+        ),
+        patch(
             "app.graphs.research.synthesis.run",
             AsyncMock(return_value=_fake_synthesis()),
         ),
@@ -169,6 +186,8 @@ async def test_research_graph_runs_all_five_nodes() -> None:
     assert isinstance(final["market_intel"], MarketIntelOutput)
     assert isinstance(final["signals"], SignalAnalysisOutput)
     assert isinstance(final["devils_advocate"], DevilsAdvocateOutput)
+    assert isinstance(final["validation"], ValidationResult)
+    assert isinstance(final["valuation_bridge"], ValuationBridge)
     assert isinstance(final["synthesis"], SynthesisOutput)
     assert final["synthesis"].layers.confidence == 0.55
 
@@ -200,6 +219,8 @@ async def test_research_graph_runs_retrieval_and_market_intel_in_parallel() -> N
         )
         return _fake_signals()
 
+    from app.models.agents.synthesis import ValidationResult, ValuationBridge
+
     with (
         patch("app.graphs.research.data_retrieval.run", side_effect=fake_retrieval),
         patch("app.graphs.research.market_intel.run", side_effect=fake_intel),
@@ -207,6 +228,14 @@ async def test_research_graph_runs_retrieval_and_market_intel_in_parallel() -> N
         patch(
             "app.graphs.research.devils_advocate.run",
             AsyncMock(return_value=_fake_devils_advocate()),
+        ),
+        patch(
+            "app.graphs.research._validation_svc.validate_research_inputs",
+            return_value=ValidationResult(),
+        ),
+        patch(
+            "app.graphs.research._valuation_svc.build_valuation_bridge",
+            return_value=ValuationBridge(),
         ),
         patch(
             "app.graphs.research.synthesis.run",
@@ -228,6 +257,8 @@ async def test_research_graph_passes_portfolio_id_to_synthesis() -> None:
         captured["portfolio_id"] = inputs.portfolio_id
         return _fake_synthesis()
 
+    from app.models.agents.synthesis import ValidationResult, ValuationBridge
+
     with (
         patch(
             "app.graphs.research.data_retrieval.run",
@@ -244,6 +275,14 @@ async def test_research_graph_passes_portfolio_id_to_synthesis() -> None:
         patch(
             "app.graphs.research.devils_advocate.run",
             AsyncMock(return_value=_fake_devils_advocate()),
+        ),
+        patch(
+            "app.graphs.research._validation_svc.validate_research_inputs",
+            return_value=ValidationResult(),
+        ),
+        patch(
+            "app.graphs.research._valuation_svc.build_valuation_bridge",
+            return_value=ValuationBridge(),
         ),
         patch("app.graphs.research.synthesis.run", side_effect=fake_synthesis),
     ):

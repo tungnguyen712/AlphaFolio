@@ -1,7 +1,7 @@
 """Research flow — LangGraph composition.
 
     START ──▶ data_retrieval ─┐
-        └──▶ market_intel    ─┴─▶ signal_analysis ─▶ devils_advocate ─▶ synthesis ─▶ END
+        └──▶ market_intel    ─┴─▶ signal_analysis ─▶ devils_advocate ─▶ validation ─▶ synthesis ─▶ END
 
 Parallel fan-out at START for the two data-gathering nodes; LangGraph waits
 for both to finish before firing signal_analysis (barrier semantics — each
@@ -30,6 +30,7 @@ from app.models.agents import (
     SynthesisInput,
     SynthesisOutput,
 )
+from app.models.agents.synthesis import ValidationResult, ValuationBridge
 from app.services.agents import (
     data_retrieval,
     devils_advocate,
@@ -37,6 +38,8 @@ from app.services.agents import (
     signal_analysis,
     synthesis,
 )
+from app.services.pipeline import validation as _validation_svc
+from app.services.pipeline import valuation_bridge as _valuation_svc
 
 
 class ResearchState(TypedDict, total=False):
@@ -52,6 +55,8 @@ class ResearchState(TypedDict, total=False):
     market_intel: MarketIntelOutput
     signals: SignalAnalysisOutput
     devils_advocate: DevilsAdvocateOutput
+    validation: ValidationResult
+    valuation_bridge: ValuationBridge
     synthesis: SynthesisOutput
 
 
@@ -130,6 +135,20 @@ async def _devils_advocate_node(state: ResearchState) -> dict:
     return {"devils_advocate": out}
 
 
+async def _validation_node(state: ResearchState) -> dict:
+    val_result = _validation_svc.validate_research_inputs(
+        ticker=state["ticker"],
+        retrieved=state["retrieved"],
+        market_intel=state.get("market_intel"),
+        signals=state["signals"],
+    )
+    bridge = _valuation_svc.build_valuation_bridge(
+        retrieved=state["retrieved"],
+        market_intel=state.get("market_intel"),
+    )
+    return {"validation": val_result, "valuation_bridge": bridge}
+
+
 async def _synthesis_node(state: ResearchState) -> dict:
     retrieved = state.get("retrieved")
     current_price: float | None = None
@@ -145,6 +164,9 @@ async def _synthesis_node(state: ResearchState) -> dict:
             portfolio_id=state.get("portfolio_id"),
             in_portfolio=state.get("in_portfolio", False),
             current_price=current_price,
+            insider_summary=retrieved.insider_summary if retrieved else None,
+            valuation_bridge=state.get("valuation_bridge"),
+            validation_result=state.get("validation"),
         )
     )
     return {"synthesis": out}
@@ -168,6 +190,7 @@ def build_research_graph() -> CompiledStateGraph:
     graph.add_node("market_intel", _market_intel_node)
     graph.add_node("signal_analysis", _signal_analysis_node)
     graph.add_node("devils_advocate", _devils_advocate_node)
+    graph.add_node("validation", _validation_node)
     graph.add_node("synthesis", _synthesis_node)
 
     # Parallel fan-out: both data-gathering agents start immediately.
@@ -179,7 +202,8 @@ def build_research_graph() -> CompiledStateGraph:
     graph.add_edge("market_intel", "signal_analysis")
 
     graph.add_edge("signal_analysis", "devils_advocate")
-    graph.add_edge("devils_advocate", "synthesis")
+    graph.add_edge("devils_advocate", "validation")
+    graph.add_edge("validation", "synthesis")
     graph.add_edge("synthesis", END)
 
     return graph.compile()

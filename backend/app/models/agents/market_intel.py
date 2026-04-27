@@ -5,7 +5,17 @@ narrative the Synthesis agent can quote from.
 """
 from __future__ import annotations
 
-from app.models.agents.common import AgentModel, AnalystChange, MacroContext, NewsItem
+from typing import Literal
+
+from pydantic import Field
+
+from app.models.agents.common import (
+    AgentModel,
+    AnalystChange,
+    FilteredNewsItem,
+    MacroContext,
+    NewsItem,
+)
 from app.models.agents.data_retrieval import RetrievalMode
 
 
@@ -21,3 +31,6 @@ class MarketIntelOutput(AgentModel):
     analyst_changes: list[AnalystChange]
     macro_context: MacroContext
     narrative_summary: str
+    filtered_out_news: list[FilteredNewsItem] = Field(default_factory=list)
+    analyst_signal_source: Literal["structured", "news_reported_analyst_signal"] = "structured"
+    news_filter_summary: str | None = None

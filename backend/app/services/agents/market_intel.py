@@ -7,6 +7,7 @@ agent can quote.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -19,6 +20,7 @@ from app.models.agents import (
     NewsItem,
 )
 from app.services.data_providers import polygon_stub, tavily
+from app.services.data_providers.news_filter import filter_news
 from app.services.data_providers.polygon_stub import PolygonFixtureMissingError
 from app.services.llm.anthropic_client import AgentTier, call_structured
 
@@ -47,11 +49,26 @@ async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
     )
     polygon_bundle = await _safe_polygon(ticker)
 
-    news_items = [NewsItem.model_validate(n) for n in news_bundle.get("news_items", [])]
+    raw_news = [NewsItem.model_validate(n) for n in news_bundle.get("news_items", [])]
     analyst_changes = [
         AnalystChange.model_validate(a) for a in polygon_bundle.get("analyst_changes", [])
     ]
     macro = MacroContext.model_validate(polygon_bundle.get("macro_context") or {})
+
+    # Post-retrieval filtering: relevance + deduplication
+    news_items, dropped = filter_news(
+        ticker=ticker,
+        items=raw_news,
+        lookback_days=inputs.lookback_days,
+    )
+    reason_counts = Counter(d.reason for d in dropped)
+    news_filter_summary = (
+        f"Kept {len(news_items)}/{len(raw_news)} articles. "
+        f"Dropped: {dict(reason_counts)}" if dropped else f"Kept all {len(news_items)} articles."
+    )
+
+    # Analyst source discipline
+    analyst_signal_source = "structured" if analyst_changes else "news_reported_analyst_signal"
 
     user_prompt = _build_user_prompt(ticker, news_items, analyst_changes, macro)
     narrative = await call_structured(
@@ -68,6 +85,9 @@ async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
         analyst_changes=analyst_changes,
         macro_context=macro,
         narrative_summary=narrative.narrative_summary,
+        filtered_out_news=dropped,
+        analyst_signal_source=analyst_signal_source,
+        news_filter_summary=news_filter_summary,
     )
 
 

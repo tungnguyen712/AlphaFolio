@@ -22,9 +22,8 @@ function extractKeywords(label: string): string[] {
   }
 
   // Extract quoted phrases or distinctive proper nouns from the headline
-  // e.g. "Top Pick", "$18B Australia", "mid-teens", "growth-to-spending"
   const phrases = cleaned
-    .split(/[:\u2014\-|]/)
+    .split(/[:—\-|]/)
     .slice(1) // everything after the outlet prefix
     .join(" ")
     .match(/\$[\d.]+[BMK]?\s*\w+|[\w\-]+\s+[\w\-]+/g) ?? [];
@@ -51,17 +50,71 @@ function findCitations(sentence: string, news: SourceRef[]): number[] {
   return cited;
 }
 
+/** Parse inline **bold** markers into React elements. */
+function parseInlineBold(text: string): React.ReactNode[] {
+  const parts = text.split(/\*\*(.+?)\*\*/g);
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <strong key={i} className="font-semibold text-neutral-900 dark:text-zinc-100">
+        {part}
+      </strong>
+    ) : (
+      part
+    )
+  );
+}
+
 interface Props {
   text: string;
   sources: SourceRef[];
 }
 
+// Known section names in order — used to map old ## headings to numbers.
+const KNOWN_SECTION_NAMES = [
+  "Recommendation",
+  "Investment Thesis",
+  "Top Signals",
+  "Valuation Bridge",
+  "Key Uncertainties",
+  "Devil's Advocate",
+  "Data Quality",
+  "Final Rationale",
+];
+
+/** Sentence splitter that avoids breaking on decimal numbers like $347.81. */
+const SENTENCE_RE = /(?:[^.!?]|\.\d)+(?:[.!?]+["']?(?=\s|$))/g;
+
+function renderSentences(text: string, news: SourceRef[]) {
+  const sentences: string[] = text.match(SENTENCE_RE) ?? [text];
+  return sentences.map((sentence, si) => {
+    const citations = news.length > 0 ? findCitations(sentence, news) : [];
+    return (
+      <span key={si}>
+        {parseInlineBold(sentence)}
+        {citations.map((n) => (
+          <sup
+            key={n}
+            className="ml-0.5 text-[10px] font-semibold text-blue-500 select-none"
+          >
+            [{n}]
+          </sup>
+        ))}
+      </span>
+    );
+  });
+}
+
 /**
- * Renders rationale with:
- * - Paragraph breaks on \n\n
- * - First sentence of each paragraph bold (topic sentence)
- * - Inline superscript citation markers [n] next to sentences whose content
- *   matches a news source label keyword
+ * Renders rationale for old-format reports (no report_sections).
+ *
+ * Handles:
+ * - Paragraph breaks on \n{2+}
+ * - New format: "1. Recommendation: content..." → numbered inline label
+ * - Old format: "## Heading content..." → transformed to numbered inline label
+ * - **bold** inline markdown
+ * - First sentence of prose paragraphs bolded (topic sentence convention)
+ * - Inline superscript citation markers [n]
+ * - Decimal numbers (e.g. $347.81) are NOT split as sentence boundaries
  */
 export function RationaleText({ text, sources }: Props) {
   const news = sources.filter((s) => s.kind === "news");
@@ -70,22 +123,83 @@ export function RationaleText({ text, sources }: Props) {
   return (
     <div className="space-y-4">
       {paragraphs.map((para, pi) => {
-        // Split paragraph into sentences on ". " boundaries, preserving punctuation
-        const sentencePattern = /[^.!?]+[.!?]+["']?(?:\s|$)/g;
-        const rawSentences = para.match(sentencePattern) ?? [para];
+        // New numbered format: "1. Recommendation: HOLD — ..."
+        const numberedMatch = para.match(/^(\d+)\.\s+([\w\s']+):\s*([\s\S]+)$/);
+        if (numberedMatch) {
+          const label = `${numberedMatch[1]}. ${numberedMatch[2]}:`;
+          const body = numberedMatch[3];
+          return (
+            <p
+              key={pi}
+              className="text-base leading-relaxed text-neutral-700 dark:text-zinc-300"
+            >
+              <strong className="font-semibold text-neutral-900 dark:text-zinc-100">
+                {label}{" "}
+              </strong>
+              {renderSentences(body, news)}
+            </p>
+          );
+        }
 
+        // Old ## heading format — transform to numbered inline if name is known
+        const headingMatch = para.match(/^##\s+(.+)$/);
+        if (headingMatch) {
+          const fullText = headingMatch[1];
+          let sectionNum: number | null = null;
+          let sectionName: string | null = null;
+          let bodyText = "";
+          for (let ni = 0; ni < KNOWN_SECTION_NAMES.length; ni++) {
+            if (fullText.startsWith(KNOWN_SECTION_NAMES[ni])) {
+              sectionNum = ni + 1;
+              sectionName = KNOWN_SECTION_NAMES[ni];
+              bodyText = fullText.slice(KNOWN_SECTION_NAMES[ni].length).trim();
+              break;
+            }
+          }
+          if (sectionNum && sectionName && bodyText) {
+            const label = `${sectionNum}. ${sectionName}:`;
+            return (
+              <p
+                key={pi}
+                className="text-base leading-relaxed text-neutral-700 dark:text-zinc-300"
+              >
+                <strong className="font-semibold text-neutral-900 dark:text-zinc-100">
+                  {label}{" "}
+                </strong>
+                {renderSentences(bodyText, news)}
+              </p>
+            );
+          }
+          // Fallback: unknown heading → render as label only
+          return (
+            <h4
+              key={pi}
+              className="mt-2 text-sm font-semibold uppercase tracking-wider text-neutral-500 dark:text-zinc-400"
+            >
+              {fullText}
+            </h4>
+          );
+        }
+
+        // Plain prose paragraph — bold first sentence as topic sentence
+        const rawSentences: string[] = para.match(SENTENCE_RE) ?? [para];
         return (
-          <p key={pi} className="text-base leading-relaxed text-neutral-700 dark:text-zinc-300">
+          <p
+            key={pi}
+            className="text-base leading-relaxed text-neutral-700 dark:text-zinc-300"
+          >
             {rawSentences.map((sentence, si) => {
               const isFirst = si === 0;
               const citations = news.length > 0 ? findCitations(sentence, news) : [];
-
+              const content = parseInlineBold(sentence);
               return (
                 <span key={si}>
                   {isFirst ? (
-                    <strong className="font-semibold text-neutral-900 dark:text-zinc-100">{sentence}</strong>
+                    <strong className="font-semibold text-neutral-900 dark:text-zinc-100">
+                      {content}
+                    </strong>
                   ) : (
-                    sentence
+                    content
                   )}
                   {citations.map((n) => (
                     <sup

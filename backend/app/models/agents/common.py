@@ -15,6 +15,27 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
 
+SourceQuality = Literal[
+    "sec_filing",
+    "company_ir",
+    "transcript",
+    "market_data",
+    "reputable_news",
+    "aggregator",
+    "blog_or_low_confidence",
+    "unknown",
+    "filtered_irrelevant",
+]
+
+FilterReasonCode = Literal[
+    "unrelated_ticker",
+    "weak_company_match",
+    "duplicate_headline",
+    "mirrored_domain",
+    "stale_article",
+    "low_quality_source",
+]
+
 
 class AgentModel(BaseModel):
     """Strict-by-default base for every agent I/O type.
@@ -34,6 +55,8 @@ class SourceRef(AgentModel):
     url: HttpUrl | None = None
     label: str
     retrieved_at: date | None = None
+    source_quality: SourceQuality | None = None
+    secondary_sourced: bool = False
 
 
 class InsiderTransaction(AgentModel):
@@ -46,6 +69,9 @@ class InsiderTransaction(AgentModel):
     filed_at: date
     form: str = "Form 4"
     source_url: HttpUrl
+    planned_status: Literal[
+        "planned_10b5_1", "discretionary", "option_exercise", "compensation", "unknown"
+    ] = "unknown"
 
 
 class CongressTrade(AgentModel):
@@ -96,6 +122,15 @@ class PriceSummary(AgentModel):
     pct_30d: float | None = None
     pct_90d: float | None = None
     iv_30d: float | None = None
+    retrieved_at: date | None = None
+    high_52w: float | None = None
+    low_52w: float | None = None
+    volume: int | None = None
+    avg_volume_30d: int | None = None
+    market_cap: float | None = None
+    forward_pe: float | None = None
+    ev_revenue: float | None = None
+    missing_fields: list[str] = Field(default_factory=list)
 
 
 class VolumeAnomaly(AgentModel):
@@ -200,3 +235,30 @@ class VerdictLayer(AgentModel):
         default=None,
         description="Take-profit / stop-loss level — set only when user already holds the ticker.",
     )
+
+
+class InsiderSummary(AgentModel):
+    """Aggregated view of Form 4 insider transactions for a single ticker.
+
+    Counts are based on unique filers/filings, not raw transaction rows, to
+    avoid overcounting when one person files multiple line items in a single Form 4.
+    """
+
+    unique_sellers: int = 0
+    unique_buyers: int = 0
+    csuite_sellers: int = 0
+    board_sellers: int = 0
+    num_distinct_filings: int = 0
+    raw_transaction_count: int = 0
+    total_sales_value: float = 0.0
+    total_purchase_value: float = 0.0
+
+
+class FilteredNewsItem(AgentModel):
+    """A news item that was dropped during post-retrieval filtering, with reason."""
+
+    headline: str
+    source: str
+    url: HttpUrl
+    reason: FilterReasonCode
+    reason_detail: str = ""

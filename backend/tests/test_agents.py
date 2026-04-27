@@ -117,12 +117,12 @@ def _fake_tavily() -> dict:
     return {
         "news_items": [
             {
-                "headline": "NVIDIA smashes Q1",
+                "headline": "NVDA smashes Q1 earnings expectations",
                 "source": "reuters",
                 "url": "https://reuters.com/a",
                 "published": "2026-04-18",
                 "score": 0.91,
-                "snippet": "Data-center revenue beat consensus by 12%.",
+                "snippet": "NVDA data-center revenue beat consensus by 12%.",
             }
         ]
     }
@@ -161,6 +161,10 @@ async def test_data_retrieval_normalizes_provider_payloads() -> None:
     assert out.price_summary.latest == 932.10
     assert out.volume_anomalies[0].z_score == 2.8
     assert "supply concentration" in out.risk_factors.text
+    # Form 4 aggregation
+    assert out.insider_summary is not None
+    assert out.insider_summary.raw_transaction_count == 1
+    assert out.insider_summary.unique_sellers == 1
 
 
 async def test_data_retrieval_survives_missing_polygon_fixture() -> None:
@@ -182,6 +186,15 @@ async def test_data_retrieval_survives_missing_polygon_fixture() -> None:
         patch(
             "app.services.agents.data_retrieval.polygon_stub.fetch_market_intel",
             AsyncMock(side_effect=PolygonFixtureMissingError("no fixture")),
+        ),
+        # Mock live fallback providers so the test is deterministic
+        patch(
+            "app.services.agents.data_retrieval.polygon_prices.fetch_prev_close_batch",
+            AsyncMock(return_value={}),
+        ),
+        patch(
+            "app.services.agents.data_retrieval.yahoo_prices.fetch_prev_close_batch",
+            AsyncMock(return_value={}),
         ),
     ):
         out = await data_retrieval.run(DataRetrievalInput(ticker="ZZZZ", lookback_days=30))
@@ -220,10 +233,13 @@ async def test_market_intel_uses_sonnet_and_wraps_provider_data() -> None:
 
     assert isinstance(out, MarketIntelOutput)
     assert out.ticker == "NVDA"
-    assert out.news_items[0].headline == "NVIDIA smashes Q1"
+    assert out.news_items[0].headline == "NVDA smashes Q1 earnings expectations"
     assert out.analyst_changes[0].to_rating == "overweight+top-pick"
     assert out.macro_context.fed_funds == 4.25
     assert captured["tier"] == AgentTier.SONNET
+    # New fields
+    assert out.analyst_signal_source == "structured"
+    assert isinstance(out.filtered_out_news, list)
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +249,7 @@ async def test_market_intel_uses_sonnet_and_wraps_provider_data() -> None:
 
 def _sample_retrieved_output():  # type: ignore[no-untyped-def]
     from app.models.agents import DataRetrievalOutput, RiskFactorsExcerpt
+    from app.models.agents.common import InsiderSummary
 
     return DataRetrievalOutput(
         ticker="NVDA",
@@ -242,6 +259,7 @@ def _sample_retrieved_output():  # type: ignore[no-untyped-def]
         price_summary=None,
         volume_anomalies=[],
         risk_factors=RiskFactorsExcerpt(text="", filing_url=None, filed_at=None),
+        insider_summary=InsiderSummary(),
     )
 
 
@@ -341,6 +359,10 @@ async def test_synthesis_uses_opus_and_returns_verdict_layer() -> None:
             rationale="Bullish thesis holds; DA case is mostly macro.",
             recommended_position_pct=0.03,
             sources=[SourceRef(kind="sec_filing", label="NVDA 10-K 2026-02")],
+            valuation_bridge=None,
+            confidence_breakdown=None,
+            validation_result=None,
+            insider_summary=None,
         )
 
     with patch(

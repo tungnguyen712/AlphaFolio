@@ -54,6 +54,49 @@ export interface SourceRef {
   url: string | null;
   label: string;
   retrieved_at: string | null;
+  source_quality?: string | null;
+  secondary_sourced?: boolean;
+}
+
+export interface InsiderSummary {
+  unique_sellers: number;
+  unique_buyers: number;
+  csuite_sellers: number;
+  board_sellers: number;
+  num_distinct_filings: number;
+  raw_transaction_count: number;
+  total_sales_value: number;
+  total_purchase_value: number;
+}
+
+export interface ScenarioCase {
+  label: "bull" | "base" | "bear";
+  price_target: number | null;
+  implied_upside_pct: number | null;
+  key_assumption: string;
+}
+
+export interface ValuationBridge {
+  current_price: number | null;
+  price_timestamp: string | null;
+  market_cap: number | null;
+  forward_pe: number | null;
+  ev_revenue: number | null;
+  scenarios: ScenarioCase[];
+  missing_fields: string[];
+}
+
+export interface ConfidenceBreakdown {
+  positive_contributors: string[];
+  negative_contributors: string[];
+  final_score: number;
+}
+
+export interface ValidationResult {
+  warnings: string[];
+  errors: string[];
+  confidence_penalty: number;
+  passed: boolean;
 }
 
 export interface ResearchReportBody {
@@ -63,6 +106,12 @@ export interface ResearchReportBody {
   rationale: string;
   recommended_position_pct: number | null;
   sources: SourceRef[];
+  valuation_bridge?: ValuationBridge | null;
+  confidence_breakdown?: ConfidenceBreakdown | null;
+  validation_result?: ValidationResult | null;
+  insider_summary?: InsiderSummary | null;
+  /** Parsed sections from rationale. Present for reports generated after section parsing was added. */
+  report_sections?: Record<string, string> | null;
 }
 
 export interface ResearchReportOut extends ResearchReportSummary {

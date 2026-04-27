@@ -18,6 +18,7 @@ from app.models.agents.common import (
     AgentModel,
     CongressTrade,
     FormDFiling,
+    InsiderSummary,
     InsiderTransaction,
     PriceSummary,
     VolumeAnomaly,
@@ -61,3 +62,4 @@ class DataRetrievalOutput(AgentModel):
     risk_factors: RiskFactorsExcerpt
     business_overview: BusinessOverviewExcerpt | None = None
     form_d_filings: list[FormDFiling] = []
+    insider_summary: InsiderSummary | None = None

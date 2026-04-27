@@ -88,3 +88,57 @@ These exist because of product Rule 3. Do not "simplify" them away.
 
 - Auto-accept routine edits and keep moving; only pause for real forks, sensitive/security changes, or hard-to-reverse actions.
 - Terse responses; skip trailing "here's what I did" summaries — the diff speaks.
+
+## Pipeline quality improvements (added 2026-04)
+
+These are live in production and must be preserved. Do not revert.
+
+**News filtering** (`app/services/data_providers/news_filter.py`):
+- Called inside `market_intel.run()` after Tavily fetch, before LLM call
+- Drops: unrelated ticker, stale articles, mirror domains, low-quality sources, near-duplicate headlines
+- `FilteredNewsItem` list + `news_filter_summary` stored in `MarketIntelOutput`
+
+**Form 4 aggregation** (`app/services/data_providers/sec_edgar.py`):
+- `aggregate_insider_transactions()` — counts unique filers, not raw transaction rows
+- `_detect_planned_status()` — reads footnote text for "10b5-1" references
+- `InsiderSummary` in `DataRetrievalOutput`; Signal Analysis prompt uses it instead of raw rows
+
+**Validation gate** (`app/services/pipeline/validation.py`):
+- Pure Python, no LLM. Runs as LangGraph node between `devils_advocate` and `synthesis`
+- Returns `ValidationResult` with `warnings`, `errors`, `confidence_penalty` (5% per warning, 15% per error, cap 50%)
+- Synthesis subtracts `confidence_penalty` from `layers.confidence`
+
+**Valuation bridge** (`app/services/pipeline/valuation_bridge.py`):
+- Pure Python. Assembles bull (+25%) / base (+8%) / bear (−18%) price anchors from `PriceSummary.latest`
+- Lists `missing_fields` (market_cap, forward_pe, ev_revenue, 52w range) explicitly
+
+**Report sections** (`app/services/agents/synthesis.py`):
+- Rationale format: `N. Section Name: content...` (numbered inline, one paragraph per section)
+- `_parse_rationale_sections()` extracts → `SynthesisOutput.report_sections: dict[str, str]`
+- 8 canonical headings in `SECTION_HEADINGS` constant in `app/models/agents/synthesis.py`
+- Frontend uses `ReportSectionsRenderer` when `report_sections` present; `RationaleText` fallback for old reports
+
+**LangGraph graph is now 6 nodes** (was 5):
+`data_retrieval + market_intel → signal_analysis → devils_advocate → validation → synthesis`
+
+**New Pydantic types** in `app/models/agents/`:
+- `common.py`: `SourceQuality`, `FilterReasonCode`, `InsiderSummary`, `FilteredNewsItem`
+- `synthesis.py`: `ScenarioCase`, `ValuationBridge`, `ConfidenceBreakdown`, `ValidationResult`, `SECTION_HEADINGS`
+- `SynthesisOutput` has 4 new optional fields: `valuation_bridge`, `confidence_breakdown`, `validation_result`, `insider_summary`, `report_sections`
+- All are backward-compatible (optional with defaults) — old DB rows deserialize fine
+
+## Deployment
+
+- **Actual**: Railway ($5/mo hobby) — Postgres plugin + Redis plugin + 3 services (api, worker, beat)
+- **Documented in README.md**: AWS ECS Fargate architecture (keep for portfolio — do not remove from README)
+- **Frontend**: Vercel (free tier)
+- `railway.toml` at repo root — defines Dockerfile path and default start command
+- Beat must stay at exactly 1 replica always
+
+## Stage progression (updated 2026-04)
+
+All stages complete:
+- Stages 1–4.4: Backend pipeline, DB schema, agent graph, Celery workers, API endpoints, Clerk auth
+- Stage 5.0: Next.js 14 frontend fully wired — research flow, portfolio flow, VerdictCard, report rendering, SSE run progress
+- Stage 5.1: Pipeline quality — news filter, Form 4 aggregation + 10b5-1 detection, validation gate, valuation bridge, structured report sections
+- Stage 5.2: Deployment — Railway + Vercel, AWS ECS architecture documented in README

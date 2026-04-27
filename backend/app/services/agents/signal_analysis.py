@@ -30,6 +30,22 @@ Rules:
   - 3-7 signals is the right shape. Don't pad. Don't conflate multiple items
     into one signal.
 
+Insider transaction rules:
+  - Reason from insider_summary (unique_sellers, csuite_sellers, board_sellers,
+    num_distinct_filings) rather than from raw transaction row count.
+  - One filer with 10 line items in a single filing is NOT "broad selling".
+    Breadth requires multiple unique filers.
+  - For each insider signal, reference planned_status of the dominant transactions.
+    planned_10b5_1 = weak-to-moderate bearish, not strong evidence of discretionary selling.
+    unknown planned_status = do not assume discretionary intent.
+  - Absence of buys is worth mentioning but should not be over-weighted without
+    holdings context.
+
+Analyst data rules:
+  - If analyst_signal_source = "news_reported_analyst_signal", treat any analyst
+    price targets or consensus mentioned in news snippets as low-confidence secondary
+    information, not structured data. Do not cite these as primary analyst evidence.
+
 You must call the record_output tool. No prose responses."""
 
 
@@ -45,9 +61,13 @@ async def run(inputs: SignalAnalysisInput) -> SignalAnalysisOutput:
 
 
 def _build_user_prompt(inputs: SignalAnalysisInput) -> str:
+    retrieved_dump = inputs.retrieved.model_dump(mode="json")
+    # Surface insider_summary at the top level for easier access in the prompt
+    insider_summary = retrieved_dump.pop("insider_summary", None)
     payload = {
         "ticker": inputs.ticker,
-        "retrieved": inputs.retrieved.model_dump(mode="json"),
+        "insider_summary": insider_summary,
+        "retrieved": retrieved_dump,
         "market_intel": (
             inputs.market_intel.model_dump(mode="json") if inputs.market_intel else None
         ),

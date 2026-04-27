@@ -20,6 +20,7 @@ from xml.etree import ElementTree as ET
 import httpx
 
 from app.config import get_settings
+from app.models.agents.common import InsiderSummary, InsiderTransaction
 from app.services.data_providers._cache import (
     AsyncRateLimiter,
     cached_fetch,
@@ -362,6 +363,7 @@ def _parse_form4_xml(xml_text: str, filing: dict[str, Any]) -> list[dict[str, An
                 "filed_at": filing["filed_at"],
                 "form": "Form 4",
                 "source_url": source_url,
+                "planned_status": _detect_planned_status(tx, root),
             }
         )
     return out
@@ -377,6 +379,66 @@ def _as_float(s: str) -> float | None:
         return float(s)
     except (TypeError, ValueError):
         return None
+
+
+def _detect_planned_status(tx: ET.Element, root: ET.Element) -> str:
+    """Classify an insider transaction by intent using Form 4 footnotes.
+
+    Searches footnote text for 10b5-1 plan references. Falls back to
+    transaction code heuristics. Returns one of the planned_status literals.
+    """
+    footnote_ids = {el.get("id") for el in tx.findall(".//footnoteId") if el.get("id")}
+    for fn in root.findall(".//footnotes/footnote"):
+        if fn.get("id") in footnote_ids:
+            text = (fn.text or "").lower()
+            if "10b5-1" in text or "rule 10b5" in text:
+                return "planned_10b5_1"
+    code = _text(tx, ".//transactionCoding/transactionCode")
+    if code == "M":
+        return "option_exercise"
+    if code == "F":
+        return "compensation"
+    if code in ("P", "S"):
+        return "discretionary"
+    return "unknown"
+
+
+def aggregate_insider_transactions(
+    transactions: list[InsiderTransaction],
+) -> InsiderSummary:
+    """Aggregate raw Form 4 rows into a summary keyed by unique filers.
+
+    Breadth metrics (unique_sellers, csuite_sellers, etc.) are based on
+    unique filer names, not raw transaction row count, so one person filing
+    multiple line items doesn't overstate selling breadth.
+    """
+    _CSUITE_KEYWORDS = {"ceo", "cfo", "coo", "cto", "president", "chief"}
+
+    sellers = [t for t in transactions if t.transaction == "sell"]
+    buyers = [t for t in transactions if t.transaction == "buy"]
+
+    def _is_csuite(role: str | None) -> bool:
+        if not role:
+            return False
+        r = role.lower()
+        # Use word-boundary search to avoid false positives like "director" ⊃ "cto"
+        return any(re.search(rf"\b{k}\b", r) for k in _CSUITE_KEYWORDS)
+
+    def _is_board(role: str | None) -> bool:
+        if not role:
+            return False
+        return "director" in role.lower() and not _is_csuite(role)
+
+    return InsiderSummary(
+        unique_sellers=len({t.filer for t in sellers}),
+        unique_buyers=len({t.filer for t in buyers}),
+        csuite_sellers=len({t.filer for t in sellers if _is_csuite(t.role)}),
+        board_sellers=len({t.filer for t in sellers if _is_board(t.role)}),
+        num_distinct_filings=len({str(t.source_url) for t in transactions}),
+        raw_transaction_count=len(transactions),
+        total_sales_value=round(sum(t.value_usd for t in sellers), 2),
+        total_purchase_value=round(sum(t.value_usd for t in buyers), 2),
+    )
 
 
 # --------------------------------------------------------------------------
