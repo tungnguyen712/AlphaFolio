@@ -75,7 +75,7 @@ export function RationaleText({ text, sources }: Props) {
         const rawSentences = para.match(sentencePattern) ?? [para];
 
         return (
-          <p key={pi} className="text-base leading-relaxed text-neutral-700">
+          <p key={pi} className="text-base leading-relaxed text-neutral-700 dark:text-zinc-300">
             {rawSentences.map((sentence, si) => {
               const isFirst = si === 0;
               const citations = news.length > 0 ? findCitations(sentence, news) : [];
@@ -83,7 +83,7 @@ export function RationaleText({ text, sources }: Props) {
               return (
                 <span key={si}>
                   {isFirst ? (
-                    <strong className="font-semibold text-neutral-900">{sentence}</strong>
+                    <strong className="font-semibold text-neutral-900 dark:text-zinc-100">{sentence}</strong>
                   ) : (
                     sentence
                   )}

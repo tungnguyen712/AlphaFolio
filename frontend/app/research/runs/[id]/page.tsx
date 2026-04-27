@@ -16,8 +16,8 @@ export default function ResearchRunPage({ params }: { params: { id: string } }) 
   );
 
   return (
-    <div className="max-w-2xl">
-      <h2 className="mb-4 text-base font-semibold text-neutral-800">Research in progress</h2>
+    <div>
+      <h2 className="mb-4 text-base font-semibold text-neutral-800 dark:text-zinc-100">Research in progress</h2>
       <RunProgressPanel runId={params.id} onComplete={handleComplete} />
     </div>
   );

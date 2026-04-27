@@ -50,14 +50,14 @@ function PendingCard({
   };
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+    <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-base font-bold text-neutral-900">{pending.ticker}</p>
-          <p className="mt-0.5 text-xs text-neutral-500">
+          <p className="text-base font-bold text-neutral-900 dark:text-zinc-100">{pending.ticker}</p>
+          <p className="mt-0.5 text-xs text-neutral-500 dark:text-zinc-400">
             Target {Math.round(parseFloat(pending.target_pct) * 100)}% allocation
           </p>
-          <p className="mt-0.5 text-xs text-neutral-400">
+          <p className="mt-0.5 text-xs text-neutral-400 dark:text-zinc-500">
             Added {new Date(pending.created_at).toLocaleDateString()}
           </p>
         </div>
@@ -81,37 +81,37 @@ function PendingCard({
       {acceptOpen && (
         <form
           onSubmit={(e) => void handleAccept(e)}
-          className="mt-4 border-t border-neutral-100 pt-4"
+          className="mt-4 border-t border-neutral-100 pt-4 dark:border-zinc-800"
         >
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600">Shares</label>
+              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Shares</label>
               <input
                 type="text"
                 value={form.shares}
                 onChange={(e) => setForm((s) => ({ ...s, shares: e.target.value }))}
                 required
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none"
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 placeholder="100"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600">Avg cost</label>
+              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Avg cost</label>
               <input
                 type="text"
                 value={form.avg_cost}
                 onChange={(e) => setForm((s) => ({ ...s, avg_cost: e.target.value }))}
                 required
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none"
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 placeholder="150.00"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600">Class</label>
+              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Class</label>
               <select
                 value={form.asset_class}
                 onChange={(e) => setForm((s) => ({ ...s, asset_class: e.target.value as AssetClass }))}
-                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm focus:outline-none"
+                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               >
                 {assetClasses.map((c) => (
                   <option key={c} value={c}>{c}</option>
@@ -124,7 +124,7 @@ function PendingCard({
             <button
               type="submit"
               disabled={accepting}
-              className="flex items-center gap-1 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
+              className="flex items-center gap-1 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
             >
               {accepting && <Spinner size="sm" />}
               Confirm
@@ -132,7 +132,7 @@ function PendingCard({
             <button
               type="button"
               onClick={() => setAcceptOpen(false)}
-              className="text-xs text-neutral-400 hover:underline"
+              className="text-xs text-neutral-400 hover:underline dark:text-zinc-500"
             >
               Cancel
             </button>
@@ -151,7 +151,7 @@ export default function PendingPage({ params }: { params: { id: string } }) {
 
   return (
     <div>
-      <h3 className="mb-4 text-sm font-semibold text-neutral-800">Pending positions</h3>
+      <h3 className="mb-4 text-sm font-semibold text-neutral-800 dark:text-zinc-100">Pending positions</h3>
       {pending.length === 0 ? (
         <EmptyState
           title="No pending positions"

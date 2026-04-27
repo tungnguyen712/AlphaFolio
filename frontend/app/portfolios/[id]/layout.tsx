@@ -29,18 +29,18 @@ function DeletePortfolioModal({
 }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
-        <h2 className="text-lg font-bold text-neutral-900">Delete portfolio?</h2>
-        <p className="mt-2 text-sm text-neutral-600">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900">
+        <h2 className="text-lg font-bold text-neutral-900 dark:text-zinc-100">Delete portfolio?</h2>
+        <p className="mt-2 text-sm text-neutral-600 dark:text-zinc-300">
           You are about to permanently delete{" "}
-          <span className="font-semibold text-neutral-900">{name}</span>. This will remove all
+          <span className="font-semibold text-neutral-900 dark:text-zinc-100">{name}</span>. This will remove all
           holdings, recommendations, pending positions, and triggers. This action cannot be undone.
         </p>
         <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={onCancel}
             disabled={loading}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
             Cancel
           </button>
@@ -90,10 +90,10 @@ export default function PortfolioLayout({
 
       <div className="mb-4 flex items-start justify-between">
         <div>
-          <Link href="/portfolios" className="text-xs text-neutral-400 hover:text-neutral-600">
+          <Link href="/portfolios" className="text-xs text-neutral-400 hover:text-neutral-600 dark:text-zinc-500 dark:hover:text-zinc-300">
             ← All portfolios
           </Link>
-          <h2 className="mt-1 text-xl font-bold text-neutral-900">
+          <h2 className="mt-1 text-xl font-bold text-neutral-900 dark:text-zinc-100">
             {portfolio?.name ?? "Portfolio"}
           </h2>
         </div>
@@ -105,7 +105,7 @@ export default function PortfolioLayout({
         </button>
       </div>
 
-      <nav className="mb-6 flex gap-1 border-b border-neutral-200">
+      <nav className="mb-6 flex gap-1 border-b border-neutral-200 dark:border-zinc-800">
         {tabs.map((tab) => {
           const href = `${base}${tab.suffix}`;
           const isActive =
@@ -118,8 +118,8 @@ export default function PortfolioLayout({
               href={href}
               className={`px-4 py-2 text-sm transition-colors ${
                 isActive
-                  ? "border-b-2 border-neutral-900 font-semibold text-neutral-900"
-                  : "text-neutral-500 hover:text-neutral-800"
+                  ? "border-b-2 border-neutral-900 font-semibold text-neutral-900 dark:border-zinc-100 dark:text-zinc-100"
+                  : "text-neutral-500 hover:text-neutral-800 dark:text-zinc-400 dark:hover:text-zinc-200"
               }`}
             >
               {tab.label}

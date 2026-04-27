@@ -29,7 +29,7 @@ const kindMeta: Record<RebalanceTriggerKind, { label: string; color: string; des
   },
   custom: {
     label: "Custom",
-    color: "bg-neutral-100 text-neutral-700",
+    color: "bg-neutral-100 text-neutral-700 dark:bg-zinc-800 dark:text-zinc-300",
     description: "Custom reminder with a date and note",
   },
 };
@@ -63,13 +63,13 @@ function ConditionFields({
   onChange: (key: string, val: string) => void;
 }) {
   const inputClass =
-    "w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-400";
+    "w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-neutral-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100";
 
   if (kind === "drift_threshold") {
     return (
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs font-medium text-neutral-600">Ticker</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Ticker</label>
           <input
             type="text"
             placeholder="e.g. AAPL"
@@ -79,7 +79,7 @@ function ConditionFields({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-neutral-600">
+          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
             Drift threshold (%)
           </label>
           <input
@@ -92,7 +92,7 @@ function ConditionFields({
             onChange={(e) => onChange("threshold_pct", e.target.value)}
             className={inputClass}
           />
-          <p className="mt-1 text-xs text-neutral-400">
+          <p className="mt-1 text-xs text-neutral-400 dark:text-zinc-500">
             Fire when this holding drifts more than this % from its target weight
           </p>
         </div>
@@ -104,7 +104,7 @@ function ConditionFields({
     return (
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label className="mb-1 block text-xs font-medium text-neutral-600">Ticker</label>
+          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Ticker</label>
           <input
             type="text"
             placeholder="e.g. AAPL"
@@ -114,7 +114,7 @@ function ConditionFields({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs font-medium text-neutral-600">
+          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
             Notes (optional)
           </label>
           <input
@@ -132,7 +132,7 @@ function ConditionFields({
   if (kind === "macro_event") {
     return (
       <div>
-        <label className="mb-1 block text-xs font-medium text-neutral-600">Event description</label>
+        <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Event description</label>
         <input
           type="text"
           placeholder="e.g. Fed rate decision, CPI release"
@@ -147,7 +147,7 @@ function ConditionFields({
   // custom
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-neutral-600">Note</label>
+      <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Note</label>
       <input
         type="text"
         placeholder="Describe this reminder"
@@ -224,10 +224,10 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-neutral-800">Rebalance triggers</h3>
+        <h3 className="text-sm font-semibold text-neutral-800 dark:text-zinc-100">Rebalance triggers</h3>
         <button
           onClick={() => setShowForm((v) => !v)}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700"
+          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-zinc-700 dark:hover:bg-zinc-600"
         >
           {showForm ? "Cancel" : "+ Add trigger"}
         </button>
@@ -236,11 +236,11 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
       {showForm && (
         <form
           onSubmit={(e) => void handleCreate(e)}
-          className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm"
+          className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
         >
           {/* Kind selector */}
           <div className="mb-4">
-            <label className="mb-2 block text-xs font-medium text-neutral-600">Trigger type</label>
+            <label className="mb-2 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Trigger type</label>
             <div className="flex flex-wrap gap-2">
               {(Object.keys(kindMeta) as RebalanceTriggerKind[]).map((k) => (
                 <button
@@ -249,15 +249,15 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
                   onClick={() => handleKindChange(k)}
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
                     kind === k
-                      ? "border-neutral-900 bg-neutral-900 text-white"
-                      : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400"
+                      ? "border-neutral-900 bg-neutral-900 text-white dark:border-zinc-500 dark:bg-zinc-700"
+                      : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:border-zinc-500"
                   }`}
                 >
                   {kindMeta[k].label}
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-xs text-neutral-400">{kindMeta[kind].description}</p>
+            <p className="mt-2 text-xs text-neutral-400 dark:text-zinc-500">{kindMeta[kind].description}</p>
           </div>
 
           {/* Kind-specific condition fields */}
@@ -267,16 +267,16 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
 
           {/* Fires at */}
           <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-neutral-600">
+            <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
               Fire at date/time{kind === "custom" || kind === "macro_event" ? "" : " (optional)"}
             </label>
             <input
               type="datetime-local"
               value={firesAt}
               onChange={(e) => setFiresAt(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-400 sm:max-w-xs"
+              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-neutral-400 sm:max-w-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
-            <p className="mt-1 text-xs text-neutral-400">
+            <p className="mt-1 text-xs text-neutral-400 dark:text-zinc-500">
               Celery Beat checks every minute and fires a notification when this time is reached.
             </p>
           </div>
@@ -286,7 +286,7 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
           <button
             type="submit"
             disabled={creating}
-            className="flex items-center gap-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
           >
             {creating && <Spinner size="sm" />}
             Create trigger
@@ -304,17 +304,17 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
           {triggers.map((t) => (
             <li
               key={t.id}
-              className="flex items-start justify-between rounded-xl border border-neutral-200 bg-white p-4 shadow-sm"
+              className="flex items-start justify-between rounded-xl border border-neutral-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
             >
               <div className="space-y-1.5">
                 <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${kindMeta[t.kind].color}`}>
                   {kindMeta[t.kind].label}
                 </span>
-                <p className="text-sm text-neutral-700">
+                <p className="text-sm text-neutral-700 dark:text-zinc-300">
                   {formatCondition(t.kind, t.condition_json as Record<string, unknown>)}
                 </p>
                 {t.fires_at && (
-                  <p className="text-xs text-neutral-400">
+                  <p className="text-xs text-neutral-400 dark:text-zinc-500">
                     Fires {new Date(t.fires_at).toLocaleString()}
                   </p>
                 )}

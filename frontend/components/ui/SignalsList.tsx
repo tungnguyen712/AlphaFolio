@@ -16,15 +16,15 @@ function parseSignals(steps: RunStepOut[]): Signal[] {
 }
 
 const directionClasses: Record<string, string> = {
-  bullish: "bg-green-50 border-green-200 text-green-800",
-  bearish: "bg-red-50 border-red-200 text-red-800",
-  neutral: "bg-neutral-50 border-neutral-200 text-neutral-700",
+  bullish: "bg-green-50 border-green-200 text-green-800 dark:bg-green-950 dark:border-green-800 dark:text-green-200",
+  bearish: "bg-red-50 border-red-200 text-red-800 dark:bg-red-950 dark:border-red-800 dark:text-red-200",
+  neutral: "bg-neutral-50 border-neutral-200 text-neutral-700 dark:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-200",
 };
 
 const labelClasses: Record<string, string> = {
-  bullish: "text-green-700 bg-green-100",
-  bearish: "text-red-700 bg-red-100",
-  neutral: "text-neutral-600 bg-neutral-100",
+  bullish: "text-green-700 bg-green-100 dark:text-green-300 dark:bg-green-950",
+  bearish: "text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-950",
+  neutral: "text-neutral-600 bg-neutral-100 dark:text-zinc-300 dark:bg-zinc-800",
 };
 
 function SignalSection({
@@ -50,7 +50,7 @@ function SignalSection({
                 <span className="text-sm font-semibold">{sig.name.replace(/_/g, " ")}</span>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <div className="h-1.5 w-12 overflow-hidden rounded-full bg-black/10">
+                <div className="h-1.5 w-12 overflow-hidden rounded-full bg-black/10 dark:bg-white/10">
                   <div
                     className="h-full rounded-full bg-current opacity-50"
                     style={{ width: `${Math.round(sig.strength * 100)}%` }}
@@ -83,10 +83,10 @@ export function SignalsList({ steps }: Props) {
   const neutral = withIdx.filter((s) => s.direction === "neutral");
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-6">
-      <h3 className="mb-4 font-semibold text-neutral-800">
+    <div className="rounded-xl border border-neutral-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
+      <h3 className="mb-4 font-semibold text-neutral-800 dark:text-zinc-100">
         Signal breakdown{" "}
-        <span className="text-sm font-normal text-neutral-400">
+        <span className="text-sm font-normal text-neutral-400 dark:text-zinc-500">
           — numbered references in the rationale point here
         </span>
       </h3>

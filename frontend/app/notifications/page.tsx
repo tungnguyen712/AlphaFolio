@@ -36,20 +36,20 @@ export default function NotificationsPage() {
 
   return (
     <div>
-      <h2 className="mb-6 text-xl font-bold text-neutral-900">Notifications</h2>
+      <h2 className="mb-6 text-xl font-bold text-neutral-900 dark:text-zinc-100">Notifications</h2>
       {notifications.length === 0 ? (
         <EmptyState title="No notifications" description="You're all caught up." />
       ) : (
-        <ul className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white shadow-sm">
+        <ul className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white shadow-sm dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
           {notifications.map((n) => (
             <li key={n.id}>
               <button
                 onClick={() => void handleClick(n)}
-                className="flex w-full items-start justify-between px-6 py-4 text-left hover:bg-neutral-50"
+                className="flex w-full items-start justify-between px-6 py-4 text-left hover:bg-neutral-50 dark:hover:bg-zinc-800/60"
               >
                 <div className="space-y-0.5">
                   <p
-                    className={`text-sm ${n.read_at ? "text-neutral-500" : "font-medium text-neutral-900"}`}
+                    className={`text-sm ${n.read_at ? "text-neutral-500 dark:text-zinc-400" : "font-medium text-neutral-900 dark:text-zinc-100"}`}
                   >
                     {n.kind === "run_complete"
                       ? "Run completed"
@@ -57,14 +57,14 @@ export default function NotificationsPage() {
                         ? "Rebalance trigger fired"
                         : "Notification"}
                   </p>
-                  <p className="text-xs text-neutral-400">
+                  <p className="text-xs text-neutral-400 dark:text-zinc-500">
                     {new Date(n.created_at).toLocaleString()}
                   </p>
                   {!n.read_at && (
                     <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
                   )}
                 </div>
-                <span className="ml-4 text-xs text-neutral-400">→</span>
+                <span className="ml-4 text-xs text-neutral-400 dark:text-zinc-500">→</span>
               </button>
             </li>
           ))}
