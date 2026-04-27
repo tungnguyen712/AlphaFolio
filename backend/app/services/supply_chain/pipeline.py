@@ -139,7 +139,7 @@ async def _safe_10k(ticker: str) -> tuple[list[RelatedCompany], str | None, str 
 
 
 async def _cached_tavily_extract(ticker: str, snippets: list[dict]) -> SupplyChainEntities:
-    key = make_cache_key("sc.tavily.haiku", ticker=ticker.upper())
+    key = make_cache_key("sc.tavily.haiku.v2", ticker=ticker.upper())
     cached = await cache_get(key)
     if cached is not None:
         return SupplyChainEntities.model_validate(cached)

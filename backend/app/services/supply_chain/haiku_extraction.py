@@ -70,7 +70,14 @@ extract any supply chain relationships that are explicitly mentioned.
 
 For each relationship, provide:
 - name: the specific company name (not generic descriptions like "cloud providers")
-- relationship: one of "supplier", "customer", "manufacturer"
+- relationship: one of:
+    "supplier"     – provides components, raw materials, or non-manufacturing services
+    "customer"     – buys products or services from the target company
+    "manufacturer" – FABRICATES or MANUFACTURES chips, wafers, or finished hardware
+                     for the target company (foundry, ODM, EMS). Examples: TSMC,
+                     Samsung foundry, GlobalFoundries, Foxconn, Intel Foundry Services.
+                     Use "manufacturer" even if the snippet says "supply" — if the
+                     company is making/fabricating the product, it is a manufacturer.
 - evidence_snippet: a direct quote from the snippets (max 150 chars)
 - is_significant: true if described as "key", "major", "primary", "sole", or "largest"
 
