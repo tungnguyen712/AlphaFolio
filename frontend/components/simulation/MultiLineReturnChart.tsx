@@ -89,7 +89,7 @@ export function MultiLineReturnChart({ series, benchmark, portfolioSeries }: Pro
           width={64}
         />
         <Tooltip
-          formatter={(value: number, name: string) => [formatPct(value), name]}
+          formatter={(value, name) => [formatPct(value as number), name as string]}
           contentStyle={{
             background: "var(--tooltip-bg, #fff)",
             border: "1px solid #e4e4e7",

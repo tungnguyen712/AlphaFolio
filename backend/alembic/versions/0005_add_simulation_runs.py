@@ -19,39 +19,43 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if "simulation_runs" in sa.inspect(bind).get_table_names():
-        return  # already created by a previous partial run
+    inspector = sa.inspect(bind)
+    existing_tables = inspector.get_table_names()
 
-    op.create_table(
-        "simulation_runs",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
-        sa.Column(
-            "user_id",
-            postgresql.UUID(as_uuid=True),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
-            nullable=False,
-            index=True,
-        ),
-        sa.Column("positions", postgresql.JSONB(), nullable=False),
-        sa.Column("start_date", sa.Date(), nullable=False),
-        sa.Column("end_date", sa.Date(), nullable=False),
-        sa.Column("benchmark", sa.String(16), nullable=False, server_default="VOO"),
-        sa.Column("result_json", postgresql.JSONB(), nullable=True),
-        sa.Column("status", sa.String(16), nullable=False, server_default="pending"),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            server_default=sa.func.now(),
-            nullable=False,
-        ),
-    )
-    op.create_index("ix_simulation_runs_user_id", "simulation_runs", ["user_id"])
+    if "simulation_runs" not in existing_tables:
+        op.create_table(
+            "simulation_runs",
+            sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+            sa.Column(
+                "user_id",
+                postgresql.UUID(as_uuid=True),
+                sa.ForeignKey("users.id", ondelete="CASCADE"),
+                nullable=False,
+                index=True,
+            ),
+            sa.Column("positions", postgresql.JSONB(), nullable=False),
+            sa.Column("start_date", sa.Date(), nullable=False),
+            sa.Column("end_date", sa.Date(), nullable=False),
+            sa.Column("benchmark", sa.String(16), nullable=False, server_default="VOO"),
+            sa.Column("result_json", postgresql.JSONB(), nullable=True),
+            sa.Column("status", sa.String(16), nullable=False, server_default="pending"),
+            sa.Column(
+                "created_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
+            sa.Column(
+                "updated_at",
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                nullable=False,
+            ),
+        )
+
+    existing_indexes = {idx["name"] for idx in inspector.get_indexes("simulation_runs")} if "simulation_runs" in existing_tables else set()
+    if "ix_simulation_runs_user_id" not in existing_indexes:
+        op.create_index("ix_simulation_runs_user_id", "simulation_runs", ["user_id"])
 
 
 def downgrade() -> None:
