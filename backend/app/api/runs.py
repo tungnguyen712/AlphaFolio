@@ -82,9 +82,11 @@ async def start_research_run(
         mode=body.mode,
         lookback_days=body.lookback_days,
         portfolio_id=body.portfolio_id,
+        as_of_date=body.as_of_date,
     )
     run_research_task.delay(str(run_id))
-    return RunAccepted(run_id=run_id, flow=AgentRunFlow.RESEARCH, status=AgentRunStatus.QUEUED)
+    flow = AgentRunFlow.BACKTEST if body.as_of_date else AgentRunFlow.RESEARCH
+    return RunAccepted(run_id=run_id, flow=flow, status=AgentRunStatus.QUEUED)
 
 
 # ---------------------------------------------------------------------------
@@ -167,9 +169,10 @@ async def get_run(
     report_json: dict | None = None
     recommendation_json: dict | None = None
     error_text: str | None = None
+    as_of_date = None
 
     if run.status == AgentRunStatus.COMPLETE:
-        if run.flow == AgentRunFlow.RESEARCH:
+        if run.flow in (AgentRunFlow.RESEARCH, AgentRunFlow.BACKTEST):
             report = (
                 await db.execute(
                     select(ResearchReport).where(ResearchReport.run_id == run_id)
@@ -177,6 +180,7 @@ async def get_run(
             ).scalar_one_or_none()
             if report is not None:
                 report_json = report.report_json
+                as_of_date = report.as_of_date
         else:
             rec = (
                 await db.execute(
@@ -211,6 +215,7 @@ async def get_run(
         completed_at=run.completed_at,
         report=report_json,
         recommendation=recommendation_json,
+        as_of_date=as_of_date,
         error=error_text,
     )
 

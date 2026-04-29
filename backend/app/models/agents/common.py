@@ -262,3 +262,29 @@ class FilteredNewsItem(AgentModel):
     url: HttpUrl
     reason: FilterReasonCode
     reason_detail: str = ""
+
+
+class OHLCVBar(AgentModel):
+    """One day of price data. Used by the simulation engine."""
+
+    date: date
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+
+
+class MaterialEvent(AgentModel):
+    """A material corporate event from an SEC 8-K filing.
+
+    Item codes map to standardized disclosure categories — e.g. 5.02 =
+    departure/appointment of principal officers, 4.01 = auditor change.
+    These are always date-accurate and available for any historical period
+    without a news-archive subscription.
+    """
+
+    filed_at: date
+    item_codes: list[str]
+    description: str
+    filing_url: str | None = None

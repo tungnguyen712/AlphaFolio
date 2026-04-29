@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api import notifications, portfolios, research, runs, supply_chain
+from app.api import notifications, portfolios, research, runs, simulation, supply_chain
 from app.auth.clerk import require_auth_configured_or_dev_bypass
 from app.config import get_settings
 from app.db.session import engine
@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
     app.include_router(runs.runs_router)
     app.include_router(notifications.router)
     app.include_router(supply_chain.router)
+    app.include_router(simulation.router)
 
     @app.get("/health")
     async def health() -> dict[str, str]:

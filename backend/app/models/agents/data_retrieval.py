@@ -12,6 +12,7 @@ read `mode` to know how to interpret it.
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from app.models.agents.common import (
@@ -20,6 +21,7 @@ from app.models.agents.common import (
     FormDFiling,
     InsiderSummary,
     InsiderTransaction,
+    MaterialEvent,
     PriceSummary,
     VolumeAnomaly,
 )
@@ -31,6 +33,7 @@ class DataRetrievalInput(AgentModel):
     ticker: str
     mode: RetrievalMode = "public"
     lookback_days: int = 90
+    as_of_date: date | None = None
 
 
 class RiskFactorsExcerpt(AgentModel):
@@ -63,3 +66,4 @@ class DataRetrievalOutput(AgentModel):
     business_overview: BusinessOverviewExcerpt | None = None
     form_d_filings: list[FormDFiling] = []
     insider_summary: InsiderSummary | None = None
+    material_events: list[MaterialEvent] = []

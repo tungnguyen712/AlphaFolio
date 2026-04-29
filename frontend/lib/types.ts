@@ -36,7 +36,7 @@ export interface SupplyChainReport {
   data_sources_used: string[];
   notes: string | null;
 }
-export type AgentRunFlow = "research" | "portfolio";
+export type AgentRunFlow = "research" | "portfolio" | "backtest";
 export type AgentRunStatus = "queued" | "running" | "complete" | "failed";
 export type RiskProfile = "conservative" | "moderate" | "aggressive";
 export type AssetClass = "ipo" | "established" | "private";
@@ -178,6 +178,7 @@ export interface RunStatusOut {
   completed_at: string | null;
   report: ResearchReportBody | null;
   recommendation: PortfolioRecommendationBody | null;
+  as_of_date: string | null;
   error: string | null;
 }
 
@@ -292,4 +293,41 @@ export interface NotificationOut {
   payload: Record<string, unknown>;
   read_at: string | null;
   created_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Simulation
+// ---------------------------------------------------------------------------
+
+export interface SimPositionIn {
+  ticker: string;
+  weight: number;
+}
+
+export interface SimDailyPoint {
+  date: string;
+  cumulative_pct: number;
+}
+
+export interface SimMetrics {
+  ticker: string;
+  total_return: number;
+  cagr: number;
+  sharpe: number;
+  max_drawdown: number;
+  start_price: number;
+  end_price: number;
+}
+
+export interface SimRunOut {
+  id: string;
+  positions: SimPositionIn[];
+  start_date: string;
+  end_date: string;
+  benchmark: string;
+  status: string;
+  series: Record<string, SimDailyPoint[]> | null;
+  portfolio_series: SimDailyPoint[] | null;
+  metrics: Record<string, SimMetrics> | null;
+  portfolio_metrics: SimMetrics | null;
 }

@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     sec_edgar_user_agent: str = "AlphaFolio Dev dev@example.com"
     tavily_api_key: str = ""
     polygon_api_key: str = ""
+    finnhub_api_key: str = ""
     polygon_stub_fixtures: str = "./tests/fixtures/polygon"
     quiver_stub_fixtures: str = "./tests/fixtures/quiver"
 

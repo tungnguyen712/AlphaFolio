@@ -145,8 +145,18 @@ def _build_user_prompt(inputs: SynthesisInput) -> str:
             inputs.validation_result.model_dump(mode="json") if inputs.validation_result else None
         ),
     }
+    historical_note = ""
+    if inputs.as_of_date:
+        historical_note = (
+            f"\n\nHISTORICAL RESEARCH CONTEXT: This run is dated {inputs.as_of_date}. "
+            "Every price timestamp, filing date, and news date at or before that date is CORRECT and INTENTIONAL — "
+            "this is point-in-time historical analysis, not stale live data. "
+            "Do NOT flag timestamps as 'stale' or 'may be outdated'. "
+            "Frame the recommendation as 'what the evidence suggested on {inputs.as_of_date}' rather than present tense."
+        )
     return (
         f"Synthesize the research on {inputs.ticker} into a final ResearchReport. "
-        "Use ## headings as specified. Call record_output.\n\n"
+        "Use ## headings as specified. Call record_output."
+        f"{historical_note}\n\n"
         f"{json.dumps(payload, indent=2, default=str)}"
     )

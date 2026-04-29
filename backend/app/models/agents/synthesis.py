@@ -91,6 +91,10 @@ class SynthesisInput(AgentModel):
     insider_summary: InsiderSummary | None = None
     valuation_bridge: ValuationBridge | None = None
     validation_result: ValidationResult | None = None
+    as_of_date: date | None = Field(
+        default=None,
+        description="Set only for historical research runs. All data timestamps at or before this date are intentional, not stale.",
+    )
 
 
 class SynthesisOutput(AgentModel):

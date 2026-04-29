@@ -82,6 +82,7 @@ export function useStartResearchRun() {
       mode: "public" | "pre_ipo";
       lookback_days?: number;
       portfolio_id?: string;
+      as_of_date?: string | null;
     }): Promise<RunAccepted | null> => {
       setLoading(true);
       setError(null);

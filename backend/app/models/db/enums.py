@@ -22,6 +22,7 @@ class ResearchSignal(StrEnum):
 class AgentRunFlow(StrEnum):
     RESEARCH = "research"
     PORTFOLIO = "portfolio"
+    BACKTEST = "backtest"
 
 
 class AgentRunStatus(StrEnum):

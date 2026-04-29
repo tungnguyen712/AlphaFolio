@@ -18,6 +18,7 @@ section. Until then, no Anthropic call is made.
 from __future__ import annotations
 
 import asyncio
+import logging
 from datetime import date
 from typing import Any
 
@@ -35,13 +36,34 @@ from app.models.agents import (
 )
 from app.services.data_providers import polygon_prices, polygon_stub, quiver_stub, sec_edgar, yahoo_prices
 from app.services.data_providers.polygon_stub import PolygonFixtureMissingError
-from app.services.data_providers.sec_edgar import aggregate_insider_transactions
+from app.services.data_providers.sec_edgar import (
+    aggregate_insider_transactions,
+    fetch_10k_excerpts_as_of,
+    fetch_8k_events,
+)
+from app.models.agents.common import MaterialEvent
+
+logger = logging.getLogger(__name__)
 
 
 async def run(inputs: DataRetrievalInput) -> DataRetrievalOutput:
     if inputs.mode == "pre_ipo":
         return await _run_pre_ipo(inputs)
     return await _run_public(inputs)
+
+
+async def _empty_congress() -> list:
+    return []
+
+
+async def _safe_8k_events(
+    ticker: str, lookback: int, as_of: date | None
+) -> dict[str, Any]:
+    try:
+        return await fetch_8k_events(ticker, lookback_days=lookback, as_of_date=as_of)
+    except Exception:
+        logger.warning("data_retrieval: 8-K event fetch failed for %s", ticker)
+        return {"events": []}
 
 
 async def _safe_form4(ticker: str, lookback: int) -> dict[str, Any]:
@@ -51,13 +73,15 @@ async def _safe_form4(ticker: str, lookback: int) -> dict[str, Any]:
         return {"insider_filings": []}
 
 
-async def _safe_10k(ticker: str) -> dict[str, Any]:
+async def _safe_10k(ticker: str, as_of: date | None = None) -> dict[str, Any]:
     """Fetch 10-K excerpts, returning empty on any ticker-resolution failure.
 
-    Falls back to an empty dict rather than crashing the whole run when the
-    ticker is delisted, OTC-only, or not yet in SEC's master list.
+    When as_of is set, uses fetch_10k_excerpts_as_of to avoid look-ahead bias
+    (only returns filings available on or before that date).
     """
     try:
+        if as_of is not None:
+            return await fetch_10k_excerpts_as_of(ticker, as_of)
         return await sec_edgar.fetch_10k_excerpts(ticker)
     except LookupError:
         return {"risk_factors_excerpt": "", "filing_url": "", "filed_at": ""}
@@ -71,22 +95,47 @@ async def _safe_10k(ticker: str) -> dict[str, Any]:
 async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
     ticker = inputs.ticker
     lookback = inputs.lookback_days
+    as_of = inputs.as_of_date
 
     form4_task = _safe_form4(ticker, lookback)
-    tenk_task = _safe_10k(ticker)
-    congress_task = quiver_stub.fetch_congress_trades(ticker)
-    polygon_task = _safe_polygon(ticker)
-
-    form4, tenk, congress, polygon = await asyncio.gather(
-        form4_task, tenk_task, congress_task, polygon_task
+    tenk_task = _safe_10k(ticker, as_of)
+    events_task = _safe_8k_events(ticker, lookback, as_of)
+    # Quiver stub is fixture-based (not date-aware) — skip in historical mode to
+    # avoid injecting future congressional trades into a point-in-time analysis.
+    congress_task = (
+        _empty_congress() if as_of is not None else quiver_stub.fetch_congress_trades(ticker)
     )
 
-    price_summary = _price_summary(polygon)
+    if as_of is not None:
+        # Historical mode: fetch price data as of the specified date via yfinance.
+        # Skip Polygon stub/live since it only returns current prices.
+        price_task = _safe_price_as_of(ticker, as_of)
+        form4, tenk, events_raw, congress, price_summary = await asyncio.gather(
+            form4_task, tenk_task, events_task, congress_task, price_task
+        )
+        polygon: dict[str, Any] = {}
+    else:
+        polygon_task = _safe_polygon(ticker)
+        form4, tenk, events_raw, congress, polygon = await asyncio.gather(
+            form4_task, tenk_task, events_task, congress_task, polygon_task
+        )
+        price_summary = _price_summary(polygon)
+
     volume_anomalies = [
         VolumeAnomaly.model_validate(v) for v in polygon.get("volume_anomalies", [])
     ]
-    insider_filings = [InsiderTransaction.model_validate(t) for t in form4["insider_filings"]]
+
+    # Historical mode: filter insider filings to those filed on or before as_of_date.
+    raw_filings = [InsiderTransaction.model_validate(t) for t in form4["insider_filings"]]
+    if as_of is not None:
+        insider_filings = [f for f in raw_filings if f.filed_at <= as_of]
+    else:
+        insider_filings = raw_filings
     insider_summary = aggregate_insider_transactions(insider_filings)
+
+    material_events = [
+        MaterialEvent.model_validate(e) for e in events_raw.get("events", [])
+    ]
 
     return DataRetrievalOutput(
         ticker=ticker,
@@ -103,6 +152,7 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
         ),
         business_overview=None,
         insider_summary=insider_summary,
+        material_events=material_events,
     )
 
 
@@ -186,6 +236,15 @@ async def _safe_form_d(company_name: str) -> list[dict[str, Any]]:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+async def _safe_price_as_of(ticker: str, as_of: date) -> PriceSummary | None:
+    """Fetch historical PriceSummary as of a specific date via yfinance."""
+    try:
+        return await yahoo_prices.fetch_price_as_of(ticker, as_of)
+    except Exception:
+        logger.warning("data_retrieval: historical price fetch failed for %s as of %s", ticker, as_of)
+        return None
 
 
 async def _safe_polygon(ticker: str) -> dict[str, Any]:

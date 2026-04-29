@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import traceback
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
@@ -78,6 +78,7 @@ async def enqueue_research_run(
     mode: RetrievalMode = "public",
     lookback_days: int = 90,
     portfolio_id: UUID | None = None,
+    as_of_date: date | None = None,
     langsmith_trace_id: str | None = None,
 ) -> UUID:
     """Insert a QUEUED agent_runs row and return its id.
@@ -95,11 +96,13 @@ async def enqueue_research_run(
         "mode": mode,
         "lookback_days": lookback_days,
         "portfolio_id": str(portfolio_id) if portfolio_id else None,
+        "as_of_date": str(as_of_date) if as_of_date else None,
     }
+    flow = AgentRunFlow.BACKTEST if as_of_date else AgentRunFlow.RESEARCH
     async with SessionLocal() as session:
         run = AgentRun(
             user_id=user_id,
-            flow=AgentRunFlow.RESEARCH,
+            flow=flow,
             ticker=stored_ticker,
             status=AgentRunStatus.QUEUED,
             graph_state={"_queued_inputs": queued_inputs},
@@ -146,12 +149,16 @@ async def execute_research_run(run_id: UUID) -> SynthesisOutput:
                 )
                 in_portfolio = check.scalar_one_or_none() is not None
 
+            as_of_raw = queued_inputs.get("as_of_date")
+            as_of = date.fromisoformat(as_of_raw) if as_of_raw else None
+
             initial = new_research_state(
                 ticker=ticker_str,
                 mode=queued_inputs.get("mode", "public"),
                 lookback_days=queued_inputs.get("lookback_days", 90),
                 portfolio_id=queued_inputs.get("portfolio_id"),
                 in_portfolio=in_portfolio,
+                as_of_date=as_of,
             )
             final_state = await _stream_and_persist(
                 session, _research_graph, initial, run_id
@@ -169,6 +176,7 @@ async def execute_research_run(run_id: UUID) -> SynthesisOutput:
                 signal=synth.signal,
                 confidence=synth.layers.confidence,
                 report_json=synth.model_dump(mode="json"),
+                as_of_date=as_of,
             )
             report_id = report.id  # UUID set by default= at construction
             session.add(report)
@@ -465,4 +473,6 @@ def _to_jsonable(obj: Any) -> Any:
         return str(obj)
     if isinstance(obj, UUID):
         return str(obj)
+    if isinstance(obj, (date, datetime)):
+        return obj.isoformat()
     return obj

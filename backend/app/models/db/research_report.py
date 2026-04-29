@@ -1,7 +1,8 @@
+from datetime import date
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Float, ForeignKey, String
+from sqlalchemy import Date, Float, ForeignKey, String
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -36,3 +37,4 @@ class ResearchReport(Base, UUIDPKMixin, TimestampMixin):
     )
     confidence: Mapped[float] = mapped_column(Float, nullable=False)
     report_json: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    as_of_date: Mapped[date | None] = mapped_column(Date, nullable=True)

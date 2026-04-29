@@ -5,6 +5,7 @@ narrative the Synthesis agent can quote from.
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from pydantic import Field
@@ -23,6 +24,7 @@ class MarketIntelInput(AgentModel):
     ticker: str
     mode: RetrievalMode = "public"
     lookback_days: int = 90
+    as_of_date: date | None = None
 
 
 class MarketIntelOutput(AgentModel):

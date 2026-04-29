@@ -32,19 +32,30 @@ class AsyncRateLimiter:
     """Leaky-bucket-ish async limiter: enforces a minimum interval between acquires.
 
     Shared per-host instance across all calls — e.g. one for sec.gov, one for
-    api.tavily.com. Thread-safe within a single event loop via an asyncio.Lock.
+    api.tavily.com.
+
+    Celery workers call asyncio.run() per task, which creates a fresh event loop
+    each time. asyncio.Lock objects are bound to the loop that created them and
+    raise RuntimeError when used from a different loop. We fix this by tracking
+    the current running loop and recreating the lock whenever it changes.
     """
 
     def __init__(self, rps: float) -> None:
         if rps <= 0:
             raise ValueError("rps must be > 0")
         self._interval = 1.0 / rps
-        self._lock = asyncio.Lock()
-        self._next_allowed_at = 0.0
+        self._lock: asyncio.Lock | None = None
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._next_allowed_at: float = 0.0
 
     async def acquire(self) -> None:
-        async with self._lock:
-            loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
+        if loop is not self._loop:
+            # New event loop (e.g. fresh Celery task) — create a fresh lock.
+            self._lock = asyncio.Lock()
+            self._loop = loop
+            self._next_allowed_at = 0.0
+        async with self._lock:  # type: ignore[arg-type]
             now = loop.time()
             wait = self._next_allowed_at - now
             if wait > 0:

@@ -64,6 +64,12 @@ export function Nav() {
             >
               Supply Chain
             </Link>
+            <Link
+              href="/simulation"
+              className={`text-sm font-medium transition-colors ${isActive("/simulation")}`}
+            >
+              Simulation
+            </Link>
           </div>
         </div>
 

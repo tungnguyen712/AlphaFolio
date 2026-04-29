@@ -104,13 +104,30 @@ export default function ResearchRunResultPage({ params }: { params: { id: string
   const sources: SourceRef[] = run.report.sources ?? [];
   const newsSources = sources.filter((s) => s.kind === "news");
 
+  const isHistorical = run.flow === "backtest" && run.as_of_date;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-neutral-800 dark:text-zinc-100">
-          Research result — {run.ticker}
-        </h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg font-semibold text-neutral-800 dark:text-zinc-100">
+            Research result — {run.ticker}
+          </h2>
+          {isHistorical && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+              Historical · as of {run.as_of_date}
+            </span>
+          )}
+        </div>
         <div className="flex items-center gap-4">
+          {isHistorical && run.ticker && (
+            <Link
+              href={`/simulation?ticker=${run.ticker}&start_date=${run.as_of_date}`}
+              className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700 hover:bg-sky-100 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-400"
+            >
+              Add to simulation →
+            </Link>
+          )}
           {savedReportId && (
             <Link href={`/research/reports/${savedReportId}`}
               className="text-neutral-500 underline hover:text-neutral-800 dark:text-zinc-400 dark:hover:text-zinc-200">

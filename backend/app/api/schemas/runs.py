@@ -1,7 +1,7 @@
 """Request/response schemas for the run-kickoff and run-status endpoints."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
 from uuid import UUID
 
@@ -24,6 +24,7 @@ class ResearchRunRequest(BaseModel):
     mode: Literal["public", "pre_ipo"] = "public"
     lookback_days: int = Field(default=90, ge=1, le=365)
     portfolio_id: UUID | None = None
+    as_of_date: date | None = None
 
 
 class PortfolioRunRequest(BaseModel):
@@ -70,6 +71,7 @@ class RunStatusOut(_APISchema):
     # Populated when status == COMPLETE.
     report: dict[str, Any] | None = None
     recommendation: dict[str, Any] | None = None
+    as_of_date: date | None = None
     # Populated when status == FAILED.
     error: str | None = None
 

@@ -12,6 +12,7 @@ there are no conflicting reducers.
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -49,6 +50,7 @@ class ResearchState(TypedDict, total=False):
     lookback_days: int
     portfolio_id: str | None
     in_portfolio: bool
+    as_of_date: date | None
 
     # Populated as the graph executes.
     retrieved: DataRetrievalOutput
@@ -67,6 +69,7 @@ def new_research_state(
     lookback_days: int = 90,
     portfolio_id: str | None = None,
     in_portfolio: bool = False,
+    as_of_date: date | None = None,
 ) -> ResearchState:
     """Build the initial state for a research run.
 
@@ -84,6 +87,7 @@ def new_research_state(
         lookback_days=lookback_days,
         portfolio_id=portfolio_id,
         in_portfolio=in_portfolio,
+        as_of_date=as_of_date,
     )
 
 
@@ -98,6 +102,7 @@ async def _data_retrieval_node(state: ResearchState) -> dict:
             ticker=state["ticker"],
             mode=state.get("mode", "public"),
             lookback_days=state.get("lookback_days", 90),
+            as_of_date=state.get("as_of_date"),
         )
     )
     return {"retrieved": out}
@@ -109,6 +114,7 @@ async def _market_intel_node(state: ResearchState) -> dict:
             ticker=state["ticker"],
             mode=state.get("mode", "public"),
             lookback_days=state.get("lookback_days", 90),
+            as_of_date=state.get("as_of_date"),
         )
     )
     return {"market_intel": out}
@@ -167,6 +173,7 @@ async def _synthesis_node(state: ResearchState) -> dict:
             insider_summary=retrieved.insider_summary if retrieved else None,
             valuation_bridge=state.get("valuation_bridge"),
             validation_result=state.get("validation"),
+            as_of_date=state.get("as_of_date"),
         )
     )
     return {"synthesis": out}

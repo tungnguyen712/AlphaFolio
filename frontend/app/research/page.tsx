@@ -28,8 +28,12 @@ function ResearchForm() {
   const [ticker, setTicker] = useState(searchParams.get("ticker") ?? "");
   const [mode, setMode] = useState<"public" | "pre_ipo">("public");
   const [lookback, setLookback] = useState("90");
+  const [historical, setHistorical] = useState(!!searchParams.get("as_of_date"));
+  const [asOfDate, setAsOfDate] = useState(searchParams.get("as_of_date") ?? "");
   const [navigating, setNavigating] = useState(false);
   const { mutate, loading, error } = useStartResearchRun();
+
+  const today = new Date().toISOString().slice(0, 10);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,6 +42,7 @@ function ResearchForm() {
       ticker: ticker.trim().toUpperCase(),
       mode,
       lookback_days: parseInt(lookback, 10),
+      as_of_date: historical && asOfDate ? asOfDate : null,
     });
     if (result) {
       setNavigating(true);
@@ -50,7 +55,34 @@ function ResearchForm() {
       onSubmit={(e) => void handleSubmit(e)}
       className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
     >
-      <h2 className="mb-4 text-base font-semibold text-neutral-800 dark:text-zinc-100">Run research</h2>
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-base font-semibold text-neutral-800 dark:text-zinc-100">Run research</h2>
+        {/* Historical mode toggle */}
+        <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 dark:border-zinc-700 dark:bg-zinc-900">
+          {(["Current", "Historical"] as const).map((label) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setHistorical(label === "Historical")}
+              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                (label === "Historical") === historical
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
+                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {historical && (
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+          Historical mode: the AI will research this ticker using data available as of the date below
+          (Finnhub news archive + SEC filings + yfinance prices).
+        </div>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="sm:col-span-1">
           <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Ticker</label>
@@ -74,30 +106,46 @@ function ResearchForm() {
             <option value="pre_ipo">Pre-IPO</option>
           </select>
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
-            Lookback (days): {lookback}
-          </label>
-          <input
-            type="range"
-            min="7"
-            max="365"
-            value={lookback}
-            onChange={(e) => setLookback(e.target.value)}
-            className="mt-2 w-full"
-          />
-        </div>
+        {historical ? (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
+              Research as of
+            </label>
+            <input
+              type="date"
+              value={asOfDate}
+              onChange={(e) => setAsOfDate(e.target.value)}
+              max={today}
+              required={historical}
+              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-neutral-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            />
+          </div>
+        ) : (
+          <div>
+            <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
+              Lookback (days): {lookback}
+            </label>
+            <input
+              type="range"
+              min="7"
+              max="365"
+              value={lookback}
+              onChange={(e) => setLookback(e.target.value)}
+              className="mt-2 w-full"
+            />
+          </div>
+        )}
       </div>
 
       {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
 
       <button
         type="submit"
-        disabled={loading || navigating}
+        disabled={loading || navigating || (historical && !asOfDate)}
         className="mt-4 flex items-center gap-2 rounded-md bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
       >
         {(loading || navigating) && <Spinner size="sm" />}
-        {navigating ? "Starting…" : "Start research"}
+        {navigating ? "Starting…" : historical ? "Run historical research" : "Start research"}
       </button>
     </form>
   );

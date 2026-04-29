@@ -16,6 +16,7 @@ from app.models.db.portfolio_recommendation import PortfolioRecommendation
 from app.models.db.rebalance_trigger import RebalanceTrigger
 from app.models.db.research_report import ResearchReport
 from app.models.db.signal_cache import SignalCache
+from app.models.db.simulation_run import SimulationRun
 from app.models.db.transcript_embedding import TranscriptEmbedding
 from app.models.db.user import User
 
@@ -38,6 +39,7 @@ __all__ = [
     "ResearchSignal",
     "RiskProfile",
     "SignalCache",
+    "SimulationRun",
     "TranscriptEmbedding",
     "User",
 ]

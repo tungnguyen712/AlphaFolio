@@ -34,14 +34,20 @@ def filter_news(
     items: list[NewsItem],
     lookback_days: int,
     company_name: str | None = None,
+    as_of_date: date | None = None,
 ) -> tuple[list[NewsItem], list[FilteredNewsItem]]:
-    """Return (kept, dropped). Deterministic — no network calls, no LLM."""
+    """Return (kept, dropped). Deterministic — no network calls, no LLM.
+
+    When as_of_date is provided the staleness check is anchored to that date
+    rather than today — required for historical research mode so articles from
+    2024 aren't dropped as "stale" when running a backtest in 2026.
+    """
     kept: list[NewsItem] = []
     dropped: list[FilteredNewsItem] = []
     seen_normalized: dict[str, NewsItem] = {}
 
     for item in items:
-        result = _classify(item, ticker, company_name, lookback_days, seen_normalized)
+        result = _classify(item, ticker, company_name, lookback_days, seen_normalized, as_of_date)
         if result is None:
             kept.append(item)
             norm = _normalize_headline(item.headline)
@@ -58,11 +64,13 @@ def _classify(
     company_name: str | None,
     lookback_days: int,
     seen: dict[str, NewsItem],
+    as_of_date: date | None = None,
 ) -> FilteredNewsItem | None:
     """Return a FilteredNewsItem if item should be dropped, else None (keep)."""
+    reference_date = as_of_date or date.today()
 
     # 1. Staleness check
-    if item.published and (date.today() - item.published).days > lookback_days:
+    if item.published and (reference_date - item.published).days > lookback_days:
         return _drop(item, "stale_article", f"published {item.published}")
 
     # 2. Low-quality source

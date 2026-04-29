@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import html
 import re
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 from xml.etree import ElementTree as ET
 
@@ -478,6 +478,166 @@ async def fetch_10k_excerpts(ticker: str) -> dict[str, Any]:
         html = resp.text
 
     excerpt = _extract_item_1a(html)
+    return {
+        "risk_factors_excerpt": excerpt,
+        "filing_url": url,
+        "filed_at": latest["filed_at"],
+    }
+
+
+# --------------------------------------------------------------------------
+# 8-K material events
+# --------------------------------------------------------------------------
+
+_8K_ITEM_LABELS: dict[str, str] = {
+    "1.01": "Entry into Material Agreement",
+    "1.02": "Termination of Material Agreement",
+    "1.03": "Bankruptcy or Receivership",
+    "2.01": "Completion of Acquisition or Disposition",
+    "2.04": "Triggering Events — Acceleration of Obligations",
+    "2.05": "Departure/Appointment: Financial Officers",
+    "2.06": "Material Impairments",
+    "3.01": "Notice of Delisting",
+    "4.01": "Change of Auditor",
+    "5.01": "Change in Control",
+    "5.02": "Departure/Appointment of Directors or Officers",
+    "5.07": "Submission to Security Holder Vote",
+    "7.01": "Regulation FD Disclosure (guidance update)",
+    "8.01": "Other Material Events",
+    "9.01": "Financial Statements",
+}
+
+_8K_LOOKBACK = 5 * 365  # fetch 5 years so any as_of_date can be served from cache
+
+
+def _8k_events_key(cik: str) -> str:
+    return make_cache_key("sec.8k.v1", cik=cik)
+
+
+@cached_fetch(key_fn=_8k_events_key, ttl_seconds=_FILINGS_TTL, rate_limiter=_rate_limiter)
+async def _fetch_8k_with_items(cik: str) -> dict[str, Any]:
+    """Fetch 8-K filings including the items field (not captured by _fetch_filings_index)."""
+    url = f"{_BASE_DATA}/submissions/CIK{cik}.json"
+    async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        body = resp.json()
+
+    recent = body.get("filings", {}).get("recent", {})
+    forms = recent.get("form", [])
+    accessions = recent.get("accessionNumber", [])
+    filed_dates = recent.get("filingDate", [])
+    primary_docs = recent.get("primaryDocument", [])
+    items_col = recent.get("items", [])
+
+    # Pad items_col in case the API omits it for some filings
+    while len(items_col) < len(forms):
+        items_col.append("")
+
+    cutoff = (datetime.now(UTC) - timedelta(days=_8K_LOOKBACK)).date()
+    out: list[dict[str, Any]] = []
+    for form, accession, filed_str, primary, items in zip(
+        forms, accessions, filed_dates, primary_docs, items_col
+    ):
+        if form not in ("8-K", "8-K/A"):
+            continue
+        try:
+            filed_date = datetime.strptime(filed_str, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if filed_date < cutoff:
+            continue
+        out.append({
+            "accession_nodash": accession.replace("-", ""),
+            "filed_at": filed_str,
+            "primary_doc": primary,
+            "items": str(items) if items else "",
+        })
+    return {"filings": out}
+
+
+async def fetch_8k_events(
+    ticker: str,
+    lookback_days: int,
+    as_of_date: date | None = None,
+) -> dict[str, Any]:
+    """Return material 8-K events within the research window.
+
+    Filters the 5-year cached index client-side so historical research gets
+    only events that were public on or before as_of_date.
+    """
+    company = await _resolve_cik(ticker)
+    cik = company["cik"]
+    cik_int = int(cik)
+
+    idx = await _fetch_8k_with_items(cik)
+    filings = idx.get("filings", [])
+
+    if as_of_date:
+        start = (as_of_date - timedelta(days=lookback_days)).isoformat()
+        end = as_of_date.isoformat()
+        filings = [f for f in filings if start <= f.get("filed_at", "") <= end]
+    else:
+        cutoff = (datetime.now(UTC) - timedelta(days=lookback_days)).date().isoformat()
+        filings = [f for f in filings if f.get("filed_at", "") >= cutoff]
+
+    events: list[dict[str, Any]] = []
+    for filing in filings[:20]:
+        raw = filing.get("items", "")
+        codes = [c.strip() for c in str(raw).split() if c.strip()]
+        if not codes:
+            continue
+        descriptions = [_8K_ITEM_LABELS.get(c, f"Item {c}") for c in codes]
+        events.append({
+            "filed_at": filing["filed_at"],
+            "item_codes": codes,
+            "description": "; ".join(descriptions),
+            "filing_url": (
+                f"{_BASE_WWW}/Archives/edgar/data/{cik_int}/"
+                f"{filing['accession_nodash']}/{filing['primary_doc']}"
+            ),
+        })
+
+    return {"events": events}
+
+
+def _tenk_as_of_key(ticker: str, as_of_date: date) -> str:
+    return make_cache_key("sec.10k.as_of", ticker=ticker.upper(), as_of=str(as_of_date))
+
+
+@cached_fetch(key_fn=_tenk_as_of_key, ttl_seconds=_DOCUMENT_TTL, rate_limiter=_rate_limiter)
+async def fetch_10k_excerpts_as_of(ticker: str, as_of_date: date) -> dict[str, Any]:
+    """Return the most recent 10-K filed on or before as_of_date.
+
+    Used by historical research mode to avoid look-ahead bias — the current
+    `fetch_10k_excerpts` always returns the latest filing regardless of date.
+    """
+    company = await _resolve_cik(ticker)
+    cik = company["cik"]
+    cik_int = int(cik)
+
+    # Large window so we see 10-Ks from several years back.
+    idx = await _fetch_filings_index(cik, form_type="10-K", lookback_days=5 * 365)
+
+    # Keep only filings available as of the historical date (filed_at <= as_of_date).
+    qualifying = [
+        f for f in idx["filings"]
+        if f.get("filed_at", "") <= as_of_date.isoformat()
+    ]
+    if not qualifying:
+        return {"risk_factors_excerpt": "", "filing_url": "", "filed_at": ""}
+
+    latest = qualifying[0]  # filings are most-recent-first
+    url = (
+        f"{_BASE_WWW}/Archives/edgar/data/{cik_int}/"
+        f"{latest['accession_nodash']}/{latest['primary_doc']}"
+    )
+    async with httpx.AsyncClient(timeout=30.0, headers=_headers()) as client:
+        resp = await client.get(url)
+        resp.raise_for_status()
+        raw_html = resp.text
+
+    excerpt = _extract_item_1a(raw_html)
     return {
         "risk_factors_excerpt": excerpt,
         "filing_url": url,

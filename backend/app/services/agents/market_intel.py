@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
+from datetime import timedelta
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -19,7 +20,8 @@ from app.models.agents import (
     MarketIntelOutput,
     NewsItem,
 )
-from app.services.data_providers import polygon_stub, tavily
+from app.config import get_settings
+from app.services.data_providers import finnhub, polygon_stub, tavily
 from app.services.data_providers.news_filter import filter_news
 from app.services.data_providers.polygon_stub import PolygonFixtureMissingError
 from app.services.llm.anthropic_client import AgentTier, call_structured
@@ -44,12 +46,30 @@ class _NarrativeOnly(BaseModel):
 
 async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
     ticker = inputs.ticker
-    news_bundle = await tavily.fetch_news(
-        ticker, lookback_days=inputs.lookback_days, mode=inputs.mode
-    )
-    polygon_bundle = await _safe_polygon(ticker)
+    as_of = inputs.as_of_date
 
-    raw_news = [NewsItem.model_validate(n) for n in news_bundle.get("news_items", [])]
+    if as_of is not None:
+        # Historical mode: use Finnhub date-range news instead of Tavily live search.
+        settings = get_settings()
+        start_date = as_of - timedelta(days=inputs.lookback_days)
+        raw_news = await finnhub.fetch_historical_news(
+            ticker, start_date=start_date, end_date=as_of, api_key=settings.finnhub_api_key
+        )
+    else:
+        news_bundle = await tavily.fetch_news(
+            ticker, lookback_days=inputs.lookback_days, mode=inputs.mode
+        )
+        raw_news = [NewsItem.model_validate(n) for n in news_bundle.get("news_items", [])]
+
+    # Historical mode: skip the Polygon stub entirely — it is fixture-based and
+    # always returns current-dated analyst changes and macro context, which would
+    # inject look-ahead data into a historical run and produce timestamp collisions
+    # that the LLM correctly flags as inconsistencies, tanking confidence.
+    if as_of is not None:
+        polygon_bundle: dict[str, Any] = {}
+    else:
+        polygon_bundle = await _safe_polygon(ticker)
+
     analyst_changes = [
         AnalystChange.model_validate(a) for a in polygon_bundle.get("analyst_changes", [])
     ]
@@ -60,6 +80,7 @@ async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
         ticker=ticker,
         items=raw_news,
         lookback_days=inputs.lookback_days,
+        as_of_date=as_of,
     )
     reason_counts = Counter(d.reason for d in dropped)
     news_filter_summary = (
