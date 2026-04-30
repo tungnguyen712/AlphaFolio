@@ -147,6 +147,7 @@ async def _validation_node(state: ResearchState) -> dict:
         retrieved=state["retrieved"],
         market_intel=state.get("market_intel"),
         signals=state["signals"],
+        as_of_date=state.get("as_of_date"),
     )
     bridge = _valuation_svc.build_valuation_bridge(
         retrieved=state["retrieved"],

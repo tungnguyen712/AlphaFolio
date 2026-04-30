@@ -24,6 +24,7 @@ from app.config import get_settings
 from app.services.data_providers import finnhub, polygon_stub, tavily
 from app.services.data_providers.news_filter import filter_news
 from app.services.data_providers.polygon_stub import PolygonFixtureMissingError
+from app.services.data_providers.sec_edgar import _resolve_cik
 from app.services.llm.anthropic_client import AgentTier, call_structured
 
 SYSTEM_PROMPT = """You are the Market Intelligence agent for a stock research system.
@@ -44,6 +45,30 @@ class _NarrativeOnly(BaseModel):
     narrative_summary: str = Field(max_length=1200)
 
 
+async def _company_name_for_filter(ticker: str) -> str | None:
+    """Resolve the human-readable company name for news relevance filtering.
+
+    Finnhub articles say 'Nvidia' not 'NVDA' — passing the clean company name
+    lets filter_news match on the full name, not just the ticker symbol.
+    Result is cached by _resolve_cik (24h TTL) so overhead is one fast DB read
+    after the first call.
+    """
+    try:
+        data = await _resolve_cik(ticker)
+        title = data.get("title", "")
+        # Strip legal suffixes so "NVIDIA CORP" → "Nvidia" matches article text
+        for suffix in (
+            " CORP", " INC", " CO", " LTD", " LLC", " LP", " NV", " SA",
+            " PLC", " GROUP", " HOLDINGS", " PLATFORMS", " TECHNOLOGIES",
+        ):
+            if title.upper().endswith(suffix):
+                title = title[: -len(suffix)].strip()
+                break
+        return title.title() or None
+    except Exception:
+        return None
+
+
 async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
     ticker = inputs.ticker
     as_of = inputs.as_of_date
@@ -55,11 +80,14 @@ async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
         raw_news = await finnhub.fetch_historical_news(
             ticker, start_date=start_date, end_date=as_of, api_key=settings.finnhub_api_key
         )
+        # Resolve full company name so filter_news can match "Nvidia" headlines for NVDA, etc.
+        company_name = await _company_name_for_filter(ticker)
     else:
         news_bundle = await tavily.fetch_news(
             ticker, lookback_days=inputs.lookback_days, mode=inputs.mode
         )
         raw_news = [NewsItem.model_validate(n) for n in news_bundle.get("news_items", [])]
+        company_name = None
 
     # Historical mode: skip the Polygon stub entirely — it is fixture-based and
     # always returns current-dated analyst changes and macro context, which would
@@ -81,6 +109,7 @@ async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
         items=raw_news,
         lookback_days=inputs.lookback_days,
         as_of_date=as_of,
+        company_name=company_name,
     )
     reason_counts = Counter(d.reason for d in dropped)
     news_filter_summary = (

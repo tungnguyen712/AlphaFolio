@@ -8,13 +8,16 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from app.models.agents.common import AgentModel, SourceRef
 from app.models.agents.signal_analysis import SignalAnalysisOutput
 
 
 class Counterargument(AgentModel):
+    # LLM occasionally adds extra annotation fields (e.g. severity_note) — ignore them.
+    model_config = ConfigDict(extra="ignore", frozen=False, populate_by_name=True)
+
     claim: str
     severity: Literal["low", "medium", "high"]
     evidence: str

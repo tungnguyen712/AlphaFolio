@@ -16,35 +16,44 @@ from app.services.llm.anthropic_client import AgentTier, call_structured
 
 SYSTEM_PROMPT = """You are the Signal Analysis agent for a stock research system.
 
-Your job: read the provided data bundle (insider filings, congress trades,
-10-K risk factors, recent news, analyst changes, macro context) and produce a
-ranked list of bull/bear signals.
+Your job: read the provided data bundle and produce a ranked list of bull/bear signals.
 
-Rules:
-  - Every signal MUST cite at least one source (from the data provided). Do
-    not invent sources.
+Bundle fields (use all that are non-empty):
+  - financial_facts.quarters: SEC XBRL quarterly revenue, net income, EPS, operating income.
+    These are the highest-reliability fundamental signals — compute YoY growth by comparing
+    quarters[0] vs quarters[4] (same period prior year). Always build a fundamental signal
+    from financial_facts when quarters is non-empty.
+  - material_events: SEC 8-K filings with item codes. Key codes to weight heavily:
+      5.02 = officer departure/appointment (CEO/CFO change — HIGH impact)
+      4.01 = auditor change (HIGH bearish impact)
+      2.06 = material impairment (BEARISH)
+      2.01 = acquisition/disposition (directional depends on deal terms)
+      1.01 = material agreement (read description — CHIPS Act, major deal, etc.)
+  - insider_filings / insider_summary: Form 4 transactions
+  - risk_factors: 10-K Item 1A text
+  - news_items: recent headlines
+  - analyst_changes: rating changes
+  - macro_context: rate/macro environment
+
+Signal rules:
+  - Every signal MUST cite at least one source. Do not invent sources.
   - strength is your confidence in the *signal*, not the overall thesis.
   - Use neutral direction only for genuinely mixed evidence, not as a hedge.
-  - Flag data gaps (e.g. "no 10-K excerpt available") in the `flags` list so
-    the Synthesis agent can weight them.
-  - 3-7 signals is the right shape. Don't pad. Don't conflate multiple items
-    into one signal.
+  - Flag data gaps in the `flags` list so Synthesis can weight them.
+  - 3-7 signals is the right shape. Don't pad. Don't conflate multiple items.
+  - financial_facts signals should reference the specific quarter and USD amounts.
+  - material_events signals should reference the filed_at date and item codes.
 
 Insider transaction rules:
   - Reason from insider_summary (unique_sellers, csuite_sellers, board_sellers,
     num_distinct_filings) rather than from raw transaction row count.
   - One filer with 10 line items in a single filing is NOT "broad selling".
-    Breadth requires multiple unique filers.
-  - For each insider signal, reference planned_status of the dominant transactions.
-    planned_10b5_1 = weak-to-moderate bearish, not strong evidence of discretionary selling.
-    unknown planned_status = do not assume discretionary intent.
-  - Absence of buys is worth mentioning but should not be over-weighted without
-    holdings context.
+  - planned_10b5_1 = weak-to-moderate bearish, not strong evidence of discretionary selling.
+  - Absence of buys is worth mentioning but should not be over-weighted.
 
 Analyst data rules:
-  - If analyst_signal_source = "news_reported_analyst_signal", treat any analyst
-    price targets or consensus mentioned in news snippets as low-confidence secondary
-    information, not structured data. Do not cite these as primary analyst evidence.
+  - If analyst_signal_source = "news_reported_analyst_signal", treat analyst data as
+    low-confidence secondary information, not structured consensus.
 
 You must call the record_output tool. No prose responses."""
 
@@ -62,10 +71,14 @@ async def run(inputs: SignalAnalysisInput) -> SignalAnalysisOutput:
 
 def _build_user_prompt(inputs: SignalAnalysisInput) -> str:
     retrieved_dump = inputs.retrieved.model_dump(mode="json")
-    # Surface insider_summary at the top level for easier access in the prompt
+    # Surface high-value fields at the top level for easier LLM access
     insider_summary = retrieved_dump.pop("insider_summary", None)
+    financial_facts = retrieved_dump.pop("financial_facts", None)
+    material_events = retrieved_dump.pop("material_events", None)
     payload = {
         "ticker": inputs.ticker,
+        "financial_facts": financial_facts,
+        "material_events": material_events,
         "insider_summary": insider_summary,
         "retrieved": retrieved_dump,
         "market_intel": (

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import logging
 import re
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
@@ -23,9 +24,13 @@ from app.config import get_settings
 from app.models.agents.common import InsiderSummary, InsiderTransaction
 from app.services.data_providers._cache import (
     AsyncRateLimiter,
+    cache_get,
+    cache_set,
     cached_fetch,
     make_cache_key,
 )
+
+logger = logging.getLogger(__name__)
 
 _BASE_WWW = "https://www.sec.gov"
 _BASE_DATA = "https://data.sec.gov"
@@ -439,6 +444,184 @@ def aggregate_insider_transactions(
         total_sales_value=round(sum(t.value_usd for t in sellers), 2),
         total_purchase_value=round(sum(t.value_usd for t in buyers), 2),
     )
+
+
+# --------------------------------------------------------------------------
+# XBRL financial facts (quarterly revenue / net income / EPS)
+# --------------------------------------------------------------------------
+#
+# Uses per-concept endpoint (/companyconcept/CIK/us-gaap/{concept}.json)
+# rather than the 5-10 MB company-facts blob. Each concept file is ~100-200 KB
+# and avoids the fp-field ambiguity that caused the company-facts approach
+# to silently return empty data for many companies.
+
+_XBRL_TTL = 24 * 60 * 60  # 24h — historical XBRL data is immutable
+
+_REVENUE_CONCEPTS: tuple[str, ...] = (
+    "RevenueFromContractWithCustomerExcludingAssessedTax",
+    "Revenues",
+    "RevenueFromContractWithCustomerIncludingAssessedTax",
+    "SalesRevenueNet",
+    "SalesRevenueGoodsNet",
+    "SalesRevenueServicesNet",
+)
+_NET_INCOME_CONCEPTS: tuple[str, ...] = ("NetIncomeLoss", "ProfitLoss")
+_EPS_CONCEPTS: tuple[str, ...] = ("EarningsPerShareDiluted", "EarningsPerShareBasic")
+_OP_INCOME_CONCEPTS: tuple[str, ...] = ("OperatingIncomeLoss",)
+
+
+def _xbrl_key(ticker: str, as_of: str) -> str:
+    return make_cache_key("sec.xbrl.v2", ticker=ticker.upper(), as_of=as_of)
+
+
+async def _fetch_one_concept(cik: str, concept: str) -> list[dict[str, Any]]:
+    """Fetch all USD values for a single XBRL concept. Returns [] on 404."""
+    # SEC XBRL API requires the CIK prefix: CIK0001326801
+    cik_param = f"CIK{cik}" if not cik.upper().startswith("CIK") else cik
+    url = f"{_BASE_DATA}/api/xbrl/companyconcept/{cik_param}/us-gaap/{concept}.json"
+    await _rate_limiter.acquire()
+    try:
+        async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as client:
+            resp = await client.get(url)
+            if resp.status_code == 404:
+                return []
+            if resp.status_code == 429:
+                logger.warning("sec_edgar: XBRL rate-limited (429) cik=%s concept=%s", cik, concept)
+                return []
+            resp.raise_for_status()
+            data = resp.json()
+        # Revenue/income in USD; EPS in USD/shares
+        return data.get("units", {}).get("USD") or data.get("units", {}).get("USD/shares") or []
+    except Exception:
+        logger.warning("sec_edgar: XBRL fetch error cik=%s concept=%s", cik, concept, exc_info=True)
+        return []
+
+
+async def _first_concept(cik: str, concepts: tuple[str, ...]) -> list[dict[str, Any]]:
+    """Fetch all concept names in parallel and return the one with the most recent data.
+
+    Companies switch XBRL concepts over time (e.g. NVDA uses `Revenues`, META uses
+    `RevenueFromContractWithCustomerExcludingAssessedTax`). Stopping at the first
+    non-empty concept silently returns stale data when an older concept has entries
+    but a newer concept has more recent ones. Fetching in parallel and picking the
+    most recently-filed result avoids this.
+    """
+    results = await asyncio.gather(
+        *[_fetch_one_concept(cik, c) for c in concepts],
+        return_exceptions=True,
+    )
+    best: list[dict[str, Any]] = []
+    best_date = ""
+    for result in results:
+        if not isinstance(result, list) or not result:
+            continue
+        latest = max(
+            (e.get("filed", "") for e in result if e.get("form") in ("10-K", "10-Q", "10-KT")),
+            default="",
+        )
+        if latest > best_date:
+            best_date = latest
+            best = result
+    return best
+
+
+def _build_period_map(
+    entries: list[dict[str, Any]],
+    as_of: date | None,
+) -> dict[str, float]:
+    """Return {period_end_iso: value} filtered to data filed on/before as_of.
+
+    Accepts 10-K and 10-Q forms. No fp-field filtering — too fragile across
+    companies. Keeps the most recently-filed version for each period_end.
+    Prefers shorter periods (quarterly ~90 days) over longer ones (annual
+    ~365 days) when two periods share the same end date.
+    """
+    best: dict[str, tuple[float, date, int]] = {}  # (val, filed, duration_days)
+    for e in entries:
+        if e.get("form") not in ("10-K", "10-Q", "10-KT", "10-QT"):
+            continue
+        end_str = e.get("end", "")
+        filed_str = e.get("filed", "")
+        start_str = e.get("start", "")
+        val = e.get("val")
+        if not end_str or not filed_str or val is None:
+            continue
+        try:
+            filed_dt = date.fromisoformat(filed_str)
+            end_dt = date.fromisoformat(end_str)
+            start_dt = date.fromisoformat(start_str) if start_str else None
+        except ValueError:
+            continue
+        if as_of and filed_dt > as_of:
+            continue
+        duration = (end_dt - start_dt).days if start_dt else 999
+        existing = best.get(end_str)
+        # Prefer: more recently filed → same filing, shorter duration (quarterly over annual)
+        if existing is None or filed_dt > existing[1] or (filed_dt == existing[1] and duration < existing[2]):
+            best[end_str] = (float(val), filed_dt, duration)
+    return {k: v[0] for k, v in best.items()}
+
+
+async def fetch_financial_facts(
+    ticker: str,
+    as_of_date: date | None = None,
+    n_periods: int = 8,
+) -> dict[str, Any]:
+    """Return recent financial periods from SEC XBRL (per-concept endpoint).
+
+    Cached 24h. Filtered to filings available on/before as_of_date.
+    Includes both quarterly (10-Q) and annual (10-K) periods — the LLM
+    can compute YoY growth by comparing same period_end one year apart.
+    """
+    as_of_str = str(as_of_date) if as_of_date else "live"
+    cache_key = _xbrl_key(ticker, as_of_str)
+    cached = await cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    company = await _resolve_cik(ticker)
+    cik = company["cik"]
+    entity_name = company.get("title", ticker)
+
+    # Fetch revenue first to anchor the period set; try concepts in order.
+    rev_entries = await _first_concept(cik, _REVENUE_CONCEPTS)
+
+    if not rev_entries:
+        logger.warning(
+            "sec_edgar: no revenue XBRL entries for ticker=%s cik=%s as_of=%s — tried concepts: %s",
+            ticker, cik, as_of_str, _REVENUE_CONCEPTS,
+        )
+        # Do NOT cache empty result — a transient SEC API failure would
+        # poison the cache for 24 h and block every subsequent run.
+        return {"entity_name": entity_name, "quarters": [], "source": "sec_edgar_xbrl"}
+
+    # Fetch remaining metrics concurrently once we know revenue data exists.
+    ni_entries, eps_entries, op_entries = await asyncio.gather(
+        _first_concept(cik, _NET_INCOME_CONCEPTS),
+        _first_concept(cik, _EPS_CONCEPTS),
+        _first_concept(cik, _OP_INCOME_CONCEPTS),
+    )
+
+    rev_map = _build_period_map(rev_entries, as_of_date)
+    ni_map = _build_period_map(ni_entries, as_of_date)
+    eps_map = _build_period_map(eps_entries, as_of_date)
+    op_map = _build_period_map(op_entries, as_of_date)
+
+    periods = sorted(rev_map.keys(), reverse=True)[:n_periods]
+    quarters = [
+        {
+            "period_end": p,
+            "revenue_usd": rev_map.get(p),
+            "net_income_usd": ni_map.get(p),
+            "eps_diluted": eps_map.get(p),
+            "operating_income_usd": op_map.get(p),
+        }
+        for p in periods
+    ]
+
+    result = {"entity_name": entity_name, "quarters": quarters, "source": "sec_edgar_xbrl"}
+    await cache_set(cache_key, result, _XBRL_TTL)
+    return result
 
 
 # --------------------------------------------------------------------------

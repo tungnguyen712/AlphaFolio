@@ -40,8 +40,9 @@ from app.services.data_providers.sec_edgar import (
     aggregate_insider_transactions,
     fetch_10k_excerpts_as_of,
     fetch_8k_events,
+    fetch_financial_facts,
 )
-from app.models.agents.common import MaterialEvent
+from app.models.agents.common import FinancialFacts, MaterialEvent, QuarterlySnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,14 @@ async def _safe_8k_events(
     except Exception:
         logger.warning("data_retrieval: 8-K event fetch failed for %s", ticker)
         return {"events": []}
+
+
+async def _safe_financial_facts(ticker: str, as_of: date | None) -> dict[str, Any]:
+    try:
+        return await fetch_financial_facts(ticker, as_of_date=as_of)
+    except Exception:
+        logger.exception("data_retrieval: XBRL facts fetch failed for %s", ticker)
+        return {"entity_name": ticker, "quarters": [], "source": "sec_edgar_xbrl"}
 
 
 async def _safe_form4(ticker: str, lookback: int) -> dict[str, Any]:
@@ -100,6 +109,7 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
     form4_task = _safe_form4(ticker, lookback)
     tenk_task = _safe_10k(ticker, as_of)
     events_task = _safe_8k_events(ticker, lookback, as_of)
+    facts_task = _safe_financial_facts(ticker, as_of)
     # Quiver stub is fixture-based (not date-aware) — skip in historical mode to
     # avoid injecting future congressional trades into a point-in-time analysis.
     congress_task = (
@@ -110,14 +120,14 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
         # Historical mode: fetch price data as of the specified date via yfinance.
         # Skip Polygon stub/live since it only returns current prices.
         price_task = _safe_price_as_of(ticker, as_of)
-        form4, tenk, events_raw, congress, price_summary = await asyncio.gather(
-            form4_task, tenk_task, events_task, congress_task, price_task
+        form4, tenk, events_raw, facts_raw, congress, price_summary = await asyncio.gather(
+            form4_task, tenk_task, events_task, facts_task, congress_task, price_task
         )
         polygon: dict[str, Any] = {}
     else:
         polygon_task = _safe_polygon(ticker)
-        form4, tenk, events_raw, congress, polygon = await asyncio.gather(
-            form4_task, tenk_task, events_task, congress_task, polygon_task
+        form4, tenk, events_raw, facts_raw, congress, polygon = await asyncio.gather(
+            form4_task, tenk_task, events_task, facts_task, congress_task, polygon_task
         )
         price_summary = _price_summary(polygon)
 
@@ -137,6 +147,15 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
         MaterialEvent.model_validate(e) for e in events_raw.get("events", [])
     ]
 
+    financial_facts: FinancialFacts | None = None
+    raw_quarters = facts_raw.get("quarters", [])
+    if raw_quarters:
+        financial_facts = FinancialFacts(
+            entity_name=facts_raw.get("entity_name", ticker),
+            quarters=[QuarterlySnapshot.model_validate(q) for q in raw_quarters],
+            source=facts_raw.get("source", "sec_edgar_xbrl"),
+        )
+
     return DataRetrievalOutput(
         ticker=ticker,
         mode="public",
@@ -153,6 +172,7 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
         business_overview=None,
         insider_summary=insider_summary,
         material_events=material_events,
+        financial_facts=financial_facts,
     )
 
 

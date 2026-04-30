@@ -123,6 +123,7 @@ async def call_structured(
 
     payload = _extract_tool_input(response)
     payload = _unwrap_if_wrapped(payload, output_model)
+    payload = _coerce_stringified_collections(payload)
     try:
         return output_model.model_validate(payload)
     except ValidationError as exc:
@@ -153,6 +154,28 @@ def _tool_spec_for(output_model: type[BaseModel]) -> dict[str, Any]:
         ),
         "input_schema": schema,
     }
+
+
+def _coerce_stringified_collections(payload: dict[str, Any]) -> dict[str, Any]:
+    """Parse any top-level values that the LLM accidentally serialised as JSON strings.
+
+    e.g. `{"signals": "[{...}]"}` → `{"signals": [{...}]}`.
+    Only acts on strings that parse as a list or dict — leaves plain strings alone.
+    """
+    import json as _json
+
+    result: dict[str, Any] = {}
+    for k, v in payload.items():
+        if isinstance(v, str):
+            stripped = v.strip()
+            if stripped.startswith(("[", "{")):
+                try:
+                    result[k] = _json.loads(stripped)
+                    continue
+                except _json.JSONDecodeError:
+                    pass
+        result[k] = v
+    return result
 
 
 def _unwrap_if_wrapped(

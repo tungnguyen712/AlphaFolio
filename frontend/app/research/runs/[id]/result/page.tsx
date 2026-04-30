@@ -115,7 +115,7 @@ export default function ResearchRunResultPage({ params }: { params: { id: string
           </h2>
           {isHistorical && (
             <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
-              Historical · as of {run.as_of_date}
+              Historical · as of {run.as_of_date?.split("-").reverse().join("/")}
             </span>
           )}
         </div>

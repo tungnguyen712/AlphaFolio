@@ -50,14 +50,31 @@ FORMAT RULES (strictly enforced):
 - Use plain prose in section bodies. Inline bold for specific figures is fine.
 - Separate each section with a blank line.
 
-NON-NEGOTIABLES (same as before):
-- `signal` must be buy, hold, or sell. Pick one.
+SIGNAL DECISION RULES — follow these strictly:
+- BUY: net bullish signals clearly outweigh bearish (e.g. strong revenue growth, momentum,
+  analyst upgrades, insider buying) AND no hard validation error. Missing valuation metrics
+  alone (market_cap, forward_pe, ev_revenue) are NOT a reason to downgrade to HOLD — they
+  are a disclosure item, not a veto. Say BUY with lower confidence and note the gap.
+- SELL: net bearish signals clearly outweigh bullish AND no compelling bull thesis survives
+  the devil's advocate.
+- HOLD: genuine ambiguity only — bull and bear signals are roughly balanced in strength,
+  OR there is a binary catalyst (pending ruling, earnings in <2 weeks) that makes direction
+  unpredictable. HOLD is NOT the default for missing data. Missing data lowers confidence;
+  it does not change a bullish read to neutral.
+
+In plain terms: if signal_analysis shows 3 bullish signals at strength 0.7+ and 1 bearish
+at 0.4, say BUY. If it shows 2 bullish at 0.5 and 2 bearish at 0.6, say HOLD. If it shows
+3 bearish at 0.7+ and 1 bullish at 0.3, say SELL.
+
+NON-NEGOTIABLES:
+- `signal` must be buy, hold, or sell. Pick one using the rules above.
 - `layers.verdict` is one actionable line; include sizing guidance for BUY.
 - `layers.top_3_signals` is 1–3 items ordered by weight.
 - `layers.key_uncertainty` names one thing only.
 - `layers.confidence` = calibrated probability MINUS validation_result.confidence_penalty.
   If validation_result.errors is non-empty, confidence must not exceed 0.50.
-  If validation_result.warnings count >= 3, reduce confidence by an additional 0.05.
+  The validation_result.confidence_penalty already accounts for warning count and
+  data-quality gaps — do NOT apply any additional penalty for warning count here.
 - `recommended_position_pct` only for BUY. Null for HOLD/SELL.
 - Every claim in `rationale` traces to signal_analysis or devil's advocate.
 - Price targets: follow in_portfolio / signal / current_price rules.

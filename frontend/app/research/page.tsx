@@ -29,7 +29,12 @@ function ResearchForm() {
   const [mode, setMode] = useState<"public" | "pre_ipo">("public");
   const [lookback, setLookback] = useState("90");
   const [historical, setHistorical] = useState(!!searchParams.get("as_of_date"));
-  const [asOfDate, setAsOfDate] = useState(searchParams.get("as_of_date") ?? "");
+  // asOfDate is always YYYY-MM-DD (sent to API); dateDisplay is DD/MM/YYYY (shown to user)
+  const initIso = searchParams.get("as_of_date") ?? "";
+  const [asOfDate, setAsOfDate] = useState(initIso);
+  const [dateDisplay, setDateDisplay] = useState(
+    initIso ? initIso.split("-").reverse().join("/") : "",
+  );
   const [navigating, setNavigating] = useState(false);
   const { mutate, loading, error } = useStartResearchRun();
 
@@ -112,10 +117,20 @@ function ResearchForm() {
               Research as of
             </label>
             <input
-              type="date"
-              value={asOfDate}
-              onChange={(e) => setAsOfDate(e.target.value)}
-              max={today}
+              type="text"
+              value={dateDisplay}
+              onChange={(e) => {
+                // strip non-digits, then auto-insert slashes at positions 2 and 4
+                const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
+                let formatted = digits;
+                if (digits.length > 4) formatted = `${digits.slice(0,2)}/${digits.slice(2,4)}/${digits.slice(4)}`;
+                else if (digits.length > 2) formatted = `${digits.slice(0,2)}/${digits.slice(2)}`;
+                setDateDisplay(formatted);
+                const m = formatted.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                setAsOfDate(m ? `${m[3]}-${m[2]}-${m[1]}` : "");
+              }}
+              placeholder="DD/MM/YYYY"
+              maxLength={10}
               required={historical}
               className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-neutral-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />

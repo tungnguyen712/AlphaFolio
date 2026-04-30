@@ -288,3 +288,31 @@ class MaterialEvent(AgentModel):
     item_codes: list[str]
     description: str
     filing_url: str | None = None
+
+
+class QuarterlySnapshot(AgentModel):
+    """One quarter of standardized XBRL financial data from SEC EDGAR.
+
+    Revenue/income figures are in USD (raw, not millions). EPS is USD per share.
+    Sourced from the SEC company-facts API — always point-in-time accurate
+    because each entry carries its own `filed` date.
+    """
+
+    period_end: date
+    revenue_usd: float | None = None
+    net_income_usd: float | None = None
+    eps_diluted: float | None = None
+    operating_income_usd: float | None = None
+
+
+class FinancialFacts(AgentModel):
+    """Recent quarterly financials extracted from SEC XBRL filings.
+
+    Always look-ahead-bias-free: values are filtered to filings available
+    on or before the research date. The LLM should compute YoY deltas by
+    comparing same-quarter periods (quarters[0] vs quarters[4]).
+    """
+
+    entity_name: str
+    quarters: list[QuarterlySnapshot]
+    source: str = "sec_edgar_xbrl"
