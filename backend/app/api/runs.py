@@ -355,6 +355,9 @@ async def _run_event_generator(
             # Poll with a short timeout so we can re-check run status periodically.
             message = await pubsub.get_message(ignore_subscribe_messages=True, timeout=2.0)
             if message is None:
+                # Keepalive comment — prevents Railway/Cloudflare from closing an
+                # idle HTTP/2 connection while Opus is generating (can take 60-90s).
+                yield b": keepalive\n\n"
                 # No message yet — check if run already completed in DB (catch-up).
                 async with SessionLocal() as db:
                     check = (await db.execute(
