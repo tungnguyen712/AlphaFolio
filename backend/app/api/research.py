@@ -8,7 +8,8 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import delete, select
 
 from app.api.deps import CurrentUserDep, DBSessionDep
 from app.api.schemas.research import ResearchReportOut, ResearchReportSummary
@@ -65,3 +66,29 @@ async def get_report(
         created_at=report.created_at,
         report=report.report_json,
     )
+
+
+class _BulkDeleteBody(BaseModel):
+    ids: list[UUID]
+
+
+@router.delete("/reports", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_reports(
+    body: _BulkDeleteBody,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> None:
+    """Delete one or more research reports owned by the current user.
+
+    Silently ignores IDs that don't exist or belong to another user —
+    idempotent so retry-on-network-error is safe.
+    """
+    if not body.ids:
+        return
+    await db.execute(
+        delete(ResearchReport).where(
+            ResearchReport.user_id == user.id,
+            ResearchReport.id.in_(body.ids),
+        )
+    )
+    await db.commit()

@@ -26,7 +26,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 from fastapi.responses import StreamingResponse
-from sqlalchemy import select
+from pydantic import BaseModel
+from sqlalchemy import delete, select
 
 from app.api.deps import CurrentUserDep, DBSessionDep
 from app.api.portfolios import _load_owned_portfolio
@@ -461,3 +462,29 @@ async def _load_owned_run(db, run_id: UUID, user_id: UUID) -> AgentRun:
             status_code=status.HTTP_404_NOT_FOUND, detail="run not found"
         )
     return run
+
+
+class _BulkDeleteRunsBody(BaseModel):
+    ids: list[UUID]
+
+
+@runs_router.delete("/runs", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_runs(
+    body: _BulkDeleteRunsBody,
+    user: CurrentUserDep,
+    db: DBSessionDep,
+) -> None:
+    """Delete one or more agent runs owned by the current user.
+
+    Cascades to agent_run_steps via DB FK. Silently ignores unknown / foreign
+    IDs — idempotent for safe retries.
+    """
+    if not body.ids:
+        return
+    await db.execute(
+        delete(AgentRun).where(
+            AgentRun.user_id == user.id,
+            AgentRun.id.in_(body.ids),
+        )
+    )
+    await db.commit()

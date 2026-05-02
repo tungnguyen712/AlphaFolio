@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useReports } from "@/hooks/useResearch";
 import { useStartResearchRun } from "@/hooks/useResearch";
 import { useRuns } from "@/hooks/useRuns";
+import { useApi } from "@/hooks/useApi";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 
@@ -167,19 +168,67 @@ function ResearchForm() {
 }
 
 function RecentRuns() {
-  const { data: runs, loading } = useRuns({ flow: "research", limit: 5 });
+  const { data: runs, loading, refetch } = useRuns({ flow: "research", limit: 5 });
+  const api = useApi();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+
   if (loading) return <Spinner />;
   if (runs.length === 0) return null;
 
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelected(selected.size === runs.length ? new Set() : new Set(runs.map((r) => r.id)));
+
+  const handleDelete = async () => {
+    if (deleting || selected.size === 0) return;
+    setDeleting(true);
+    try {
+      await api.del("/runs", { ids: Array.from(selected) });
+      setSelected(new Set());
+      await refetch();
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <div className="mt-8">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-700 dark:text-zinc-300">Recent runs</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-neutral-700 dark:text-zinc-300">Recent runs</h2>
+        {selected.size > 0 && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-neutral-500 dark:text-zinc-400">
+              {selected.size} selected
+            </span>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        )}
+      </div>
       <ul className="space-y-2">
         {runs.map((run) => (
-          <li key={run.id}>
+          <li key={run.id} className="group flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={selected.has(run.id)}
+              onChange={() => toggle(run.id)}
+              className="h-4 w-4 cursor-pointer rounded border-neutral-300 text-blue-600 accent-blue-600 dark:border-zinc-600"
+            />
             <Link
               href={`/research/runs/${run.id}`}
-              className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
+              className="flex flex-1 items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
             >
               <div className="flex items-center gap-3">
                 <span
@@ -198,50 +247,116 @@ function RecentRuns() {
           </li>
         ))}
       </ul>
+      {runs.length > 1 && (
+        <button
+          onClick={toggleAll}
+          className="mt-2 text-xs text-neutral-400 hover:text-neutral-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+        >
+          {selected.size === runs.length ? "Deselect all" : "Select all"}
+        </button>
+      )}
     </div>
   );
 }
 
 function RecentReports() {
-  const { data: reports, loading } = useReports({ limit: 20 });
+  const { data: reports, loading, refetch } = useReports({ limit: 20 });
+  const api = useApi();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState(false);
+
   if (loading) return <Spinner />;
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelected(selected.size === reports.length ? new Set() : new Set(reports.map((r) => r.id)));
+
+  const handleDelete = async () => {
+    if (deleting || selected.size === 0) return;
+    setDeleting(true);
+    try {
+      await api.del("/research/reports", { ids: Array.from(selected) });
+      setSelected(new Set());
+      await refetch();
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="mt-8">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-700 dark:text-zinc-300">Research reports</h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-neutral-700 dark:text-zinc-300">Research reports</h2>
+        {selected.size > 0 && (
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-neutral-500 dark:text-zinc-400">
+              {selected.size} selected
+            </span>
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        )}
+      </div>
       {reports.length === 0 ? (
         <EmptyState
           title="No reports yet"
           description="Run research on a ticker to see reports here."
         />
       ) : (
-        <ul className="space-y-2">
-          {reports.map((r) => (
-            <li key={r.id}>
-              <Link
-                href={`/research/reports/${r.id}`}
-                className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
-              >
-                <div className="flex items-center gap-3">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${signalBadge[r.signal] ?? ""}`}
-                  >
-                    {r.signal.toUpperCase()}
-                  </span>
-                  <span className="text-sm font-medium text-neutral-800 dark:text-zinc-100">{r.ticker}</span>
-                </div>
-                <div className="flex items-center gap-4">
-                  <span className="text-xs text-neutral-500 dark:text-zinc-400">
-                    {Math.round(r.confidence * 100)}% confidence
-                  </span>
-                  <span className="text-xs text-neutral-400 dark:text-zinc-500">
-                    {new Date(r.created_at).toLocaleDateString()}
-                  </span>
-                </div>
-              </Link>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="space-y-2">
+            {reports.map((r) => (
+              <li key={r.id} className="group flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={selected.has(r.id)}
+                  onChange={() => toggle(r.id)}
+                  className="h-4 w-4 cursor-pointer rounded border-neutral-300 text-blue-600 accent-blue-600 dark:border-zinc-600"
+                />
+                <Link
+                  href={`/research/reports/${r.id}`}
+                  className="flex flex-1 items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
+                >
+                  <div className="flex items-center gap-3">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${signalBadge[r.signal] ?? ""}`}
+                    >
+                      {r.signal.toUpperCase()}
+                    </span>
+                    <span className="text-sm font-medium text-neutral-800 dark:text-zinc-100">{r.ticker}</span>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <span className="text-xs text-neutral-500 dark:text-zinc-400">
+                      {Math.round(r.confidence * 100)}% confidence
+                    </span>
+                    <span className="text-xs text-neutral-400 dark:text-zinc-500">
+                      {new Date(r.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+          {reports.length > 1 && (
+            <button
+              onClick={toggleAll}
+              className="mt-2 text-xs text-neutral-400 hover:text-neutral-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+            >
+              {selected.size === reports.length ? "Deselect all" : "Select all"}
+            </button>
+          )}
+        </>
       )}
     </div>
   );

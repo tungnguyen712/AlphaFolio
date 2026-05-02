@@ -52,7 +52,11 @@ export function createApiClient(getToken: () => Promise<string | null>) {
       }),
     patch: <T>(path: string, body: unknown) =>
       request<T>(path, getToken, { method: "PATCH", body: JSON.stringify(body) }),
-    del: (path: string) => request<void>(path, getToken, { method: "DELETE" }),
+    del: (path: string, body?: unknown) =>
+      request<void>(path, getToken, {
+        method: "DELETE",
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      }),
   };
 }
 
