@@ -194,6 +194,11 @@ class MacroContext(AgentModel):
 
 
 class PriceTarget(AgentModel):
+    # LLMs occasionally inject extra fields (e.g. `secondary_sourced` bled from
+    # SourceRef). Use "ignore" rather than "forbid" so those are silently dropped
+    # instead of crashing the validation pipeline.
+    model_config = ConfigDict(extra="ignore", frozen=False, populate_by_name=True)
+
     price: float = Field(description="Target price in USD.")
     horizon: str = Field(description="Expected time window, e.g. '3–6 months'.")
     rationale: str = Field(
