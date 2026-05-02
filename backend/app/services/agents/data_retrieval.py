@@ -35,6 +35,7 @@ from app.models.agents import (
     VolumeAnomaly,
 )
 from app.services.data_providers import polygon_prices, polygon_stub, quiver_stub, sec_edgar, yahoo_prices
+from app.services.data_providers import yahoo_consensus
 from app.services.data_providers.polygon_stub import PolygonFixtureMissingError
 from app.services.data_providers.sec_edgar import (
     aggregate_insider_transactions,
@@ -42,7 +43,7 @@ from app.services.data_providers.sec_edgar import (
     fetch_8k_events,
     fetch_financial_facts,
 )
-from app.models.agents.common import FinancialFacts, MaterialEvent, QuarterlySnapshot
+from app.models.agents.common import ConsensusData, FinancialFacts, MaterialEvent, QuarterlySnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,16 @@ async def _safe_10k(ticker: str, as_of: date | None = None) -> dict[str, Any]:
         return {"risk_factors_excerpt": "", "filing_url": "", "filed_at": ""}
 
 
+async def _safe_consensus(ticker: str, as_of: date | None) -> ConsensusData | None:
+    """Fetch analyst consensus. Always returns None in historical mode because
+    yahooquery has no point-in-time endpoint — surfacing today's consensus
+    for a past research date would introduce look-ahead bias."""
+    if as_of is not None:
+        logger.debug("data_retrieval: skipping consensus for historical run (%s as_of %s)", ticker, as_of)
+        return None
+    return await yahoo_consensus.fetch_consensus(ticker)
+
+
 # ---------------------------------------------------------------------------
 # Public branch
 # ---------------------------------------------------------------------------
@@ -110,6 +121,7 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
     tenk_task = _safe_10k(ticker, as_of)
     events_task = _safe_8k_events(ticker, lookback, as_of)
     facts_task = _safe_financial_facts(ticker, as_of)
+    consensus_task = asyncio.create_task(_safe_consensus(ticker, as_of))
     # Quiver stub is fixture-based (not date-aware) — skip in historical mode to
     # avoid injecting future congressional trades into a point-in-time analysis.
     congress_task = (
@@ -130,6 +142,8 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
             form4_task, tenk_task, events_task, facts_task, congress_task, polygon_task
         )
         price_summary = _price_summary(polygon)
+
+    consensus = await consensus_task
 
     volume_anomalies = [
         VolumeAnomaly.model_validate(v) for v in polygon.get("volume_anomalies", [])
@@ -173,6 +187,7 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
         insider_summary=insider_summary,
         material_events=material_events,
         financial_facts=financial_facts,
+        consensus=consensus,
     )
 
 

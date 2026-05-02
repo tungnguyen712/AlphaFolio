@@ -316,3 +316,42 @@ class FinancialFacts(AgentModel):
     entity_name: str
     quarters: list[QuarterlySnapshot]
     source: str = "sec_edgar_xbrl"
+
+
+class ConsensusData(AgentModel):
+    """Analyst consensus snapshot from Yahoo Finance (yahooquery).
+
+    All fields are optional — thin analyst coverage or missing data returns
+    None rather than raising. Populated in public mode only (no historical
+    endpoint; skipped when as_of_date is set).
+    """
+
+    # --- Price targets ---
+    current_price: float | None = None
+    target_low: float | None = None
+    target_high: float | None = None
+    target_mean: float | None = None
+    target_median: float | None = None
+    number_of_analyst_opinions: int | None = None
+
+    # --- Consensus rating ---
+    # e.g. "buy", "hold", "sell", "strong_buy", "strong_sell", "underperform"
+    recommendation_key: str | None = None
+    # Scale: 1.0 = Strong Buy, 2.0 = Buy, 3.0 = Hold, 4.0 = Underperform, 5.0 = Strong Sell
+    recommendation_mean: float | None = None
+
+    # --- Rating distribution (most recent period) ---
+    strong_buy: int | None = None
+    buy: int | None = None
+    hold: int | None = None
+    sell: int | None = None
+    strong_sell: int | None = None
+
+    # --- Forward EPS estimates ---
+    eps_current_quarter: float | None = None
+    eps_current_year: float | None = None
+    eps_next_year: float | None = None
+
+    # --- Derived (computed in provider, not by LLM) ---
+    # (target_mean - current_price) / current_price * 100; None if either is absent
+    implied_upside_pct: float | None = None

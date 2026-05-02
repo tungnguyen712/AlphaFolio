@@ -22,6 +22,8 @@ from app.services.data_providers._cache import (
 from app.services.data_providers.polygon_stub import fetch_market_intel
 from app.services.data_providers.quiver_stub import fetch_congress_trades
 from app.services.data_providers.sec_edgar import _parse_form4_xml
+from app.services.data_providers import yahoo_consensus
+from app.models.agents import ConsensusData
 
 
 # ---------------------------------------------------------------------------
@@ -166,3 +168,82 @@ async def test_cache_set_then_get_roundtrip() -> None:
         async with SessionLocal() as session:
             await session.execute(delete(SignalCache).where(SignalCache.cache_key == key))
             await session.commit()
+
+
+# ---------------------------------------------------------------------------
+# yahoo_consensus provider
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_fetch_consensus_returns_none_on_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Provider must swallow all exceptions and return None."""
+    def _boom(ticker: str) -> dict:  # type: ignore[return]
+        raise RuntimeError("network error")
+
+    monkeypatch.setattr(yahoo_consensus, "_sync_fetch", _boom)
+    # Bypass the cache decorator so _sync_fetch is actually called.
+    monkeypatch.setattr(yahoo_consensus, "_fetch_raw", yahoo_consensus._sync_fetch)
+
+    result = await yahoo_consensus.fetch_consensus("AAPL")
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_consensus_parses_financial_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    """fetch_consensus maps Yahoo's camelCase keys to ConsensusData correctly."""
+    _FAKE_RAW = {
+        "financial_data": {
+            "currentPrice": 150.0,
+            "targetMeanPrice": 185.0,
+            "targetLowPrice": 130.0,
+            "targetHighPrice": 220.0,
+            "targetMedianPrice": 182.0,
+            "numberOfAnalystOpinions": 10,
+            "recommendationKey": "buy",
+            "recommendationMean": 2.0,
+        },
+        "recommendation_trend": {
+            "strongBuy": 3,
+            "buy": 4,
+            "hold": 3,
+            "sell": 0,
+            "strongSell": 0,
+        },
+        "eps_estimates": {
+            "current_quarter": 1.10,
+            "current_year": 4.40,
+            "next_year": 5.20,
+        },
+    }
+
+    async def _fake_fetch_raw(ticker: str) -> dict:
+        return _FAKE_RAW
+
+    monkeypatch.setattr(yahoo_consensus, "_fetch_raw", _fake_fetch_raw)
+
+    result = await yahoo_consensus.fetch_consensus("AAPL")
+    assert isinstance(result, ConsensusData)
+    assert result.current_price == 150.0
+    assert result.target_mean == 185.0
+    assert result.recommendation_key == "buy"
+    assert result.strong_buy == 3
+    assert result.buy == 4
+    assert result.eps_current_year == 4.40
+    # implied_upside_pct = (185 - 150) / 150 * 100 = 23.33...
+    assert result.implied_upside_pct is not None
+    assert abs(result.implied_upside_pct - 23.33) < 0.01
+
+
+@pytest.mark.asyncio
+async def test_fetch_consensus_handles_empty_raw(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Empty dicts from Yahoo (e.g. ticker not found) must yield a valid object."""
+    async def _fake_fetch_raw(ticker: str) -> dict:
+        return {"financial_data": {}, "recommendation_trend": {}, "eps_estimates": {}}
+
+    monkeypatch.setattr(yahoo_consensus, "_fetch_raw", _fake_fetch_raw)
+
+    result = await yahoo_consensus.fetch_consensus("ZZZZ")
+    assert isinstance(result, ConsensusData)
+    assert result.current_price is None
+    assert result.implied_upside_pct is None

@@ -18,6 +18,7 @@ from typing import Literal
 from app.models.agents.common import (
     AgentModel,
     CongressTrade,
+    ConsensusData,
     FinancialFacts,
     FormDFiling,
     InsiderSummary,
@@ -69,3 +70,4 @@ class DataRetrievalOutput(AgentModel):
     insider_summary: InsiderSummary | None = None
     material_events: list[MaterialEvent] = []
     financial_facts: FinancialFacts | None = None
+    consensus: ConsensusData | None = None

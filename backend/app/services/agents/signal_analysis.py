@@ -34,6 +34,16 @@ Bundle fields (use all that are non-empty):
   - news_items: recent headlines
   - analyst_changes: rating changes
   - macro_context: rate/macro environment
+  - analyst_consensus: Yahoo Finance aggregate price targets + recommendation distribution
+
+## Analyst Consensus rules
+  recommendation_mean scale: 1.0 = Strong Buy, 2.0 = Buy, 3.0 = Hold, 4.0 = Underperform, 5.0 = Strong Sell.
+  - implied_upside_pct > +20% AND number_of_analyst_opinions ≥ 5: bullish signal, strength 0.5–0.7 depending on conviction spread.
+  - implied_upside_pct < −10%: bearish signal, strength 0.4–0.6.
+  - Thin coverage (number_of_analyst_opinions < 3): cap signal strength at 0.4 and add a 'thin_analyst_coverage' flag.
+  - Consensus should corroborate fundamental/insider signals, not stand alone. Do NOT emit a pure-consensus signal as the only evidence for a verdict.
+  - If analyst_consensus is null or absent: emit a flag 'analyst_consensus_unavailable' and proceed without it.
+  - source kind for consensus signals: kind="market_data", quality="aggregator".
 
 Signal rules:
   - Every signal MUST cite at least one source. Do not invent sources.
@@ -75,11 +85,13 @@ def _build_user_prompt(inputs: SignalAnalysisInput) -> str:
     insider_summary = retrieved_dump.pop("insider_summary", None)
     financial_facts = retrieved_dump.pop("financial_facts", None)
     material_events = retrieved_dump.pop("material_events", None)
+    consensus = retrieved_dump.pop("consensus", None)
     payload = {
         "ticker": inputs.ticker,
         "financial_facts": financial_facts,
         "material_events": material_events,
         "insider_summary": insider_summary,
+        "analyst_consensus": consensus,
         "retrieved": retrieved_dump,
         "market_intel": (
             inputs.market_intel.model_dump(mode="json") if inputs.market_intel else None

@@ -17,6 +17,7 @@ from pydantic import ValidationError
 from app.models.agents import (
     AnalystChange,
     CongressTrade,
+    ConsensusData,
     MacroContext,
     PriceSummary,
     VerdictLayer,
@@ -89,3 +90,49 @@ def test_verdict_layer_confidence_bounds() -> None:
             key_uncertainty="x",
             confidence=1.5,
         )
+
+
+# ---------------------------------------------------------------------------
+# ConsensusData
+# ---------------------------------------------------------------------------
+
+
+def test_consensus_data_full_round_trip() -> None:
+    raw = {
+        "current_price": 150.0,
+        "target_low": 120.0,
+        "target_high": 220.0,
+        "target_mean": 180.0,
+        "target_median": 175.0,
+        "number_of_analyst_opinions": 12,
+        "recommendation_key": "buy",
+        "recommendation_mean": 2.1,
+        "strong_buy": 4,
+        "buy": 5,
+        "hold": 3,
+        "sell": 0,
+        "strong_sell": 0,
+        "eps_current_quarter": 1.20,
+        "eps_current_year": 4.80,
+        "eps_next_year": 5.50,
+        "implied_upside_pct": 20.0,
+    }
+    c = ConsensusData.model_validate(raw)
+    assert c.recommendation_key == "buy"
+    assert c.number_of_analyst_opinions == 12
+    assert c.implied_upside_pct == 20.0
+    assert c.strong_buy == 4
+
+
+def test_consensus_data_all_none_is_valid() -> None:
+    """An empty dict must produce a valid ConsensusData (all fields optional)."""
+    c = ConsensusData.model_validate({})
+    assert c.current_price is None
+    assert c.implied_upside_pct is None
+
+
+def test_consensus_data_json_round_trip() -> None:
+    c = ConsensusData(current_price=100.0, target_mean=130.0, implied_upside_pct=30.0)
+    dumped = c.model_dump(mode="json")
+    restored = ConsensusData.model_validate(dumped)
+    assert restored.implied_upside_pct == 30.0
