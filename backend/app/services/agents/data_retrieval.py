@@ -142,6 +142,9 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
             form4_task, tenk_task, events_task, facts_task, congress_task, polygon_task, consensus_task
         )
         price_summary = _price_summary(polygon)
+        # Supplement with valuation fields from yfinance (market_cap, forward_pe, ev_revenue, 52w range)
+        if price_summary is not None:
+            price_summary = await _supplement_price_summary(ticker, price_summary)
 
     volume_anomalies = [
         VolumeAnomaly.model_validate(v) for v in polygon.get("volume_anomalies", [])
@@ -314,3 +317,85 @@ def _price_summary(polygon: dict[str, Any]) -> PriceSummary | None:
         if getattr(ps, f, None) is None
     ]
     return ps.model_copy(update={"missing_fields": missing, "retrieved_at": date.today()})
+
+
+async def _supplement_price_summary(ticker: str, ps: PriceSummary) -> PriceSummary:
+    """Fetch missing valuation and 52w fields from yfinance and merge into ps.
+
+    This is best-effort: if yfinance fails, returns the original ps unchanged.
+    """
+    loop = asyncio.get_event_loop()
+    try:
+        enriched = await loop.run_in_executor(None, _yf_enrich_price_summary, ticker, ps)
+        return enriched
+    except Exception:
+        logger.debug("data_retrieval: yfinance enrichment failed for %s", ticker)
+        return ps
+
+
+def _yf_enrich_price_summary(ticker: str, ps: PriceSummary) -> PriceSummary:
+    """Sync worker: fetches yfinance .info + 400-day history and merges into ps."""
+    import yfinance as yf
+    from datetime import timedelta
+
+    t = yf.Ticker(ticker)
+
+    # Valuation fields
+    market_cap = ps.market_cap
+    forward_pe = ps.forward_pe
+    ev_revenue = ps.ev_revenue
+    try:
+        info = t.info or {}
+        if market_cap is None:
+            v = info.get("marketCap")
+            market_cap = float(v) if v is not None else None
+        if forward_pe is None:
+            v = info.get("forwardPE")
+            forward_pe = float(v) if v is not None else None
+        if ev_revenue is None:
+            v = info.get("enterpriseToRevenue")
+            ev_revenue = float(v) if v is not None else None
+    except Exception:
+        pass
+
+    # 52-week high/low from 400-day history
+    high_52w = ps.high_52w
+    low_52w = ps.low_52w
+    volume = ps.volume
+    if high_52w is None or low_52w is None:
+        try:
+            today = date.today()
+            hist = t.history(
+                start=str(today - timedelta(days=400)),
+                end=str(today + timedelta(days=1)),
+                auto_adjust=True,
+            )
+            if not hist.empty:
+                if high_52w is None and "High" in hist.columns:
+                    high_52w = float(hist["High"].max())
+                if low_52w is None and "Low" in hist.columns:
+                    low_52w = float(hist["Low"].min())
+                if volume is None and "Volume" in hist.columns:
+                    volume = int(hist["Volume"].iloc[-1])
+        except Exception:
+            pass
+
+    missing = [
+        f for f, v in [
+            ("market_cap", market_cap),
+            ("forward_pe", forward_pe),
+            ("ev_revenue", ev_revenue),
+            ("high_52w", high_52w),
+            ("low_52w", low_52w),
+        ] if v is None
+    ]
+
+    return ps.model_copy(update={
+        "market_cap": market_cap,
+        "forward_pe": forward_pe,
+        "ev_revenue": ev_revenue,
+        "high_52w": high_52w,
+        "low_52w": low_52w,
+        "volume": volume,
+        "missing_fields": missing,
+    })

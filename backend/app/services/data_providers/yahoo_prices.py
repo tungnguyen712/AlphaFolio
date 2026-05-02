@@ -174,7 +174,27 @@ def _yf_price_summary(ticker: str, as_of: date) -> PriceSummary:
     low_52w = float(hist["Low"].min()) if "Low" in hist.columns else None
     volume = int(hist["Volume"].iloc[-1]) if "Volume" in hist.columns else None
 
-    missing = [f for f in ("market_cap", "forward_pe", "ev_revenue") if True]
+    # Fetch valuation fields from yfinance info (best-effort)
+    market_cap: float | None = None
+    forward_pe: float | None = None
+    ev_revenue: float | None = None
+    try:
+        info = t.info or {}
+        market_cap = _float_or_none(info.get("marketCap"))
+        forward_pe = _float_or_none(info.get("forwardPE"))
+        ev_revenue = _float_or_none(info.get("enterpriseToRevenue"))
+    except Exception:
+        pass
+
+    missing = [
+        f for f, v in [
+            ("market_cap", market_cap),
+            ("forward_pe", forward_pe),
+            ("ev_revenue", ev_revenue),
+            ("high_52w", high_52w),
+            ("low_52w", low_52w),
+        ] if v is None
+    ]
 
     return PriceSummary(
         latest=latest_price,
@@ -183,9 +203,19 @@ def _yf_price_summary(ticker: str, as_of: date) -> PriceSummary:
         high_52w=high_52w,
         low_52w=low_52w,
         volume=volume,
+        market_cap=market_cap,
+        forward_pe=forward_pe,
+        ev_revenue=ev_revenue,
         retrieved_at=latest_date,
         missing_fields=missing,
     )
+
+
+def _float_or_none(val: Any) -> float | None:
+    try:
+        return float(val) if val is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _fetch_ohlcv_sync_batch(
