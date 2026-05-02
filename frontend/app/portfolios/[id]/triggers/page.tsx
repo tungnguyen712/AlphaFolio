@@ -32,6 +32,21 @@ const kindMeta: Record<RebalanceTriggerKind, { label: string; color: string; des
     color: "bg-neutral-100 text-neutral-700 dark:bg-zinc-800 dark:text-zinc-300",
     description: "Custom reminder with a date and note",
   },
+  price_below: {
+    label: "Price below",
+    color: "bg-red-100 text-red-700",
+    description: "Notify when the price falls below a target level",
+  },
+  price_above: {
+    label: "Price above",
+    color: "bg-green-100 text-green-700",
+    description: "Notify when the price rises above a target level",
+  },
+  earnings_beat_check: {
+    label: "Earnings beat",
+    color: "bg-sky-100 text-sky-700",
+    description: "Notify after earnings with EPS beat/miss result",
+  },
 };
 
 function formatCondition(kind: RebalanceTriggerKind, cond: Record<string, unknown>): string {
