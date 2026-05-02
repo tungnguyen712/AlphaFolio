@@ -15,6 +15,10 @@ celery_app.conf.update(
     task_default_queue="agents_graph",
     task_queues=None,
     task_acks_late=True,
+    # Reject (re-queue) in-flight tasks when the worker process is killed
+    # unexpectedly (OOM, node eviction). Combined with acks_late=True this
+    # guarantees at-least-once delivery without losing the task.
+    task_reject_on_worker_lost=True,
     worker_prefetch_multiplier=1,
     task_track_started=True,
     timezone="UTC",
