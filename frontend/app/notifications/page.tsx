@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useNotifications } from "@/hooks/useNotifications";
 import type { NotificationOut } from "@/lib/types";
@@ -25,9 +26,14 @@ function notifHref(n: NotificationOut): string {
 export default function NotificationsPage() {
   const router = useRouter();
   const { notifications, markRead, loading, error } = useNotifications(false);
+  const [readingId, setReadingId] = useState<string | null>(null);
 
   const handleClick = async (n: NotificationOut) => {
-    if (!n.read_at) await markRead(n.id);
+    if (readingId) return;
+    if (!n.read_at) {
+      setReadingId(n.id);
+      await markRead(n.id);
+    }
     router.push(notifHref(n));
   };
 
@@ -45,7 +51,8 @@ export default function NotificationsPage() {
             <li key={n.id}>
               <button
                 onClick={() => void handleClick(n)}
-                className="flex w-full items-start justify-between px-6 py-4 text-left hover:bg-neutral-50 dark:hover:bg-zinc-800/60"
+                disabled={readingId === n.id}
+                className="flex w-full items-start justify-between px-6 py-4 text-left hover:bg-neutral-50 disabled:cursor-wait dark:hover:bg-zinc-800/60"
               >
                 <div className="space-y-0.5">
                   <p

@@ -165,6 +165,7 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
   const { mutate: deleteTrigger } = useDeleteTrigger(params.id);
 
   const [showForm, setShowForm] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [kind, setKind] = useState<RebalanceTriggerKind>("drift_threshold");
   const [firesAt, setFiresAt] = useState("");
   const [condFields, setCondFields] = useState<Record<string, string>>({});
@@ -213,8 +214,11 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
   };
 
   const handleDelete = async (triggerId: string) => {
+    if (deletingId) return;
     if (!confirm("Deactivate this trigger? It will no longer fire notifications.")) return;
+    setDeletingId(triggerId);
     await deleteTrigger(triggerId);
+    setDeletingId(null);
     void refetch();
   };
 
@@ -321,9 +325,10 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
               </div>
               <button
                 onClick={() => void handleDelete(t.id)}
-                className="ml-4 shrink-0 rounded px-2 py-1 text-xs text-red-500 hover:bg-red-50 hover:text-red-700"
+                disabled={deletingId === t.id}
+                className="ml-4 shrink-0 rounded px-2 py-1 text-xs text-red-500 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Deactivate
+                {deletingId === t.id ? "Deactivating…" : "Deactivate"}
               </button>
             </li>
           ))}
