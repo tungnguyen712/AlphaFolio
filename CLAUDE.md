@@ -89,7 +89,7 @@ These exist because of product Rule 3. Do not "simplify" them away.
 - Auto-accept routine edits and keep moving; only pause for real forks, sensitive/security changes, or hard-to-reverse actions.
 - Terse responses; skip trailing "here's what I did" summaries — the diff speaks.
 
-## Pipeline quality improvements (added 2026-04)
+## Pipeline quality improvements (added 2026-04, updated 2026-05)
 
 These are live in production and must be preserved. Do not revert.
 
@@ -118,14 +118,40 @@ These are live in production and must be preserved. Do not revert.
 - 8 canonical headings in `SECTION_HEADINGS` constant in `app/models/agents/synthesis.py`
 - Frontend uses `ReportSectionsRenderer` when `report_sections` present; `RationaleText` fallback for old reports
 
+**Analyst Consensus Layer** (`app/services/data_providers/yahoo_consensus.py`, added 2026-05):
+- `fetch_consensus(ticker) -> ConsensusData | None` via yahooquery (sync, runs in executor)
+- `ConsensusData` in `app/models/agents/common.py`: target prices, recommendation_key/mean, buy/hold/sell counts, EPS estimates, `implied_upside_pct`
+- Field added to `DataRetrievalOutput`; Signal Analysis prompt interprets consensus signals with coverage thresholds
+- Skipped in historical mode (`as_of is not None`) to prevent look-ahead bias
+- **consensus_task runs inside `asyncio.gather()` in data_retrieval** — do not await it separately
+- 24-hour TTL in `signal_cache`
+
+**Portfolio Optimization Solver** (`app/services/pipeline/portfolio_solver.py`, added 2026-05):
+- Pure scipy (SLSQP) mean-variance and max-Sharpe optimizer; runs in thread pool before the LLM call
+- `solve_async(tickers, risk_profile, lookback_days=90) -> SolverResult`
+- Method selection: conservative → min-variance; moderate/aggressive → max-Sharpe
+- Max single-position caps: conservative 20%, moderate 30%, aggressive 45%
+- Fallback to equal-weight when < 2 tickers or insufficient price history
+- `SolverResult` injected into `PortfolioConstructionInput.solver_result`; LLM uses weights as baseline and must explain any deviation
+- Dependencies: `numpy>=1.26`, `scipy>=1.13` added to `pyproject.toml`
+
 **LangGraph graph is now 6 nodes** (was 5):
 `data_retrieval + market_intel → signal_analysis → devils_advocate → validation → synthesis`
 
 **New Pydantic types** in `app/models/agents/`:
-- `common.py`: `SourceQuality`, `FilterReasonCode`, `InsiderSummary`, `FilteredNewsItem`
+- `common.py`: `SourceQuality`, `FilterReasonCode`, `InsiderSummary`, `FilteredNewsItem`, `ConsensusData`
 - `synthesis.py`: `ScenarioCase`, `ValuationBridge`, `ConfidenceBreakdown`, `ValidationResult`, `SECTION_HEADINGS`
+- `portfolio_construction.py`: `SolverResult` (from `portfolio_solver`), `solver_result` field on `PortfolioConstructionInput`
 - `SynthesisOutput` has 4 new optional fields: `valuation_bridge`, `confidence_breakdown`, `validation_result`, `insider_summary`, `report_sections`
 - All are backward-compatible (optional with defaults) — old DB rows deserialize fine
+
+**`PriceTarget.extra = "ignore"`** (`app/models/agents/common.py`):
+- LLMs occasionally hallucinate `secondary_sourced` into `entry_price_target`; override drops unknown fields silently instead of raising `extra_forbidden`
+
+**Latency fixes** (2026-05):
+- `consensus_task` in `asyncio.gather()` — saves ~2–3s vs serial await
+- Synthesis `max_tokens` 16 000 → 10 000 — saves ~1–2s
+- Retry `wait_exponential + wait_random(0, 1)` jitter — prevents thundering-herd retries
 
 ## Deployment
 
@@ -159,7 +185,7 @@ A dedicated 3rd flow distinct from Research and Portfolio. **Descriptive, not a 
 2. Dependency % — extract from 10-K Item 7 (MD&A); store as `dependency_pct: float | None`
 3. Numeric confidence score — replace `"high"|"medium"|"low"` with `float` (0.0–1.0); scoring: Wikidata=0.90, 10-K explicit+significant=0.80, 10-K unnamed=0.55, Tavily corroborated=0.40, Tavily-only=0.25
 
-## Stage progression (updated 2026-04)
+## Stage progression (updated 2026-05)
 
 All stages complete:
 - Stages 1–4.4: Backend pipeline, DB schema, agent graph, Celery workers, API endpoints, Clerk auth
@@ -167,3 +193,6 @@ All stages complete:
 - Stage 5.1: Pipeline quality — news filter, Form 4 aggregation + 10b5-1 detection, validation gate, valuation bridge, structured report sections
 - Stage 5.2: Deployment — Railway + Vercel, AWS ECS architecture documented in README
 - Stage 5.3: Supply Chain flow — 3rd flow, Wikidata + 10-K Item 1 + Tavily, `GET /supply-chain/{ticker}`, frontend at `/supply-chain/[ticker]`
+- Stage 5.4: Analyst Consensus Layer — yahooquery provider, `ConsensusData` type, threaded through DataRetrievalOutput → SignalAnalysis prompt
+- Stage 5.5: Portfolio Optimization Solver — scipy mean-variance / max-Sharpe, `SolverResult`, injected into PortfolioConstructionInput before LLM call
+- Stage 5.6: UX — Chrome-style bulk delete for research runs and reports; research report limit increased to 20

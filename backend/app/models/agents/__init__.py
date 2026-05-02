@@ -52,6 +52,7 @@ from app.models.agents.portfolio_construction import (
     PortfolioConstructionOutput,
     ProposedTrade,
 )
+from app.services.pipeline.portfolio_solver import SolverResult
 from app.models.agents.signal_analysis import (
     Signal,
     SignalAnalysisInput,
@@ -94,6 +95,7 @@ __all__ = [
     "Signal",
     "SignalAnalysisInput",
     "SignalAnalysisOutput",
+    "SolverResult",
     "SourceQuality",
     "SourceRef",
     "SynthesisInput",

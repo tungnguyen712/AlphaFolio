@@ -14,6 +14,7 @@ from pydantic import Field
 from app.models.agents.common import AgentModel, VerdictLayer
 from app.models.agents.synthesis import SynthesisOutput
 from app.models.db.enums import AssetClass, RiskProfile
+from app.services.pipeline.portfolio_solver import SolverResult
 
 
 class HoldingSnapshot(AgentModel):
@@ -36,6 +37,14 @@ class PortfolioConstructionInput(AgentModel):
     objective: str = Field(
         default="maintain risk profile and integrate new convictions",
         description="Free-text objective for this run. Keeps the reasoning focused.",
+    )
+    solver_result: "SolverResult | None" = Field(
+        default=None,
+        description=(
+            "Output of the mean-variance / max-Sharpe optimizer. "
+            "When present, the LLM must use these weights as the target_allocations baseline "
+            "and explain the math rather than inventing numbers."
+        ),
     )
 
 

@@ -8,6 +8,7 @@ Multi-agent AI stock research and portfolio management platform. A LangGraph pip
 - 6-node LangGraph pipeline: Data Retrieval → Market Intel → Signal Analysis → Devil's Advocate → Validation Gate → Synthesis
 - Post-retrieval news filtering — ticker relevance (word-boundary), staleness, mirror domains, near-duplicate headlines
 - Form 4 insider transaction aggregation — unique filers vs raw row counts, 10b5-1 plan detection
+- **Analyst Consensus Layer** — yahooquery provider: target prices, recommendation key/mean, buy/hold/sell counts, EPS estimates, implied upside %; injected into Signal Analysis prompt with coverage thresholds
 - Deterministic validation gate before LLM synthesis: flags missing price data, unsourced signals, stale analyst data
 - Structured valuation bridge with bull/base/bear scenario anchors and explicit missing-data disclosure
 - Equity research memo with 8 structured sections: Recommendation, Thesis, Top Signals, Valuation Bridge, Key Uncertainties, Devil's Advocate, Data Quality, Final Rationale
@@ -16,6 +17,11 @@ Multi-agent AI stock research and portfolio management platform. A LangGraph pip
 **Portfolio Builder**
 - Holdings management with rebalance triggers (macro event, lockup expiry, earnings date, drift threshold)
 - Research → Portfolio cross-link: BUY verdicts create pending positions; holdings link back to research reports
+- **Mean-variance / max-Sharpe portfolio optimizer** (scipy SLSQP): runs before the LLM call, produces mathematically optimal weights from 90-day historical returns; LLM narrates the math rather than inventing numbers
+  - Method selection: conservative → minimum variance; moderate/aggressive → maximum Sharpe ratio
+  - Per-profile concentration caps: conservative 20%, moderate 30%, aggressive 45%
+  - Fallback to equal-weight when < 2 tickers or insufficient price history
+- Chrome-style bulk delete for research runs and reports (checkboxes, "X selected", Select all / Deselect all)
 
 **Supply Chain**
 - Descriptive relationship map for any ticker: suppliers, customers, manufacturers

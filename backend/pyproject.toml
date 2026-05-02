@@ -27,6 +27,8 @@ dependencies = [
     "python-multipart>=0.0.9",
     "yfinance>=0.2.50",
     "yahooquery>=2.3",
+    "numpy>=1.26",
+    "scipy>=1.13",
 ]
 
 [project.optional-dependencies]
