@@ -26,9 +26,9 @@ from app.models.agents.market_intel import MarketIntelOutput
 from app.models.agents.signal_analysis import SignalAnalysisOutput
 from app.models.agents.synthesis import ValidationResult
 
-_INFRA_PENALTY = 0.02   # data-stack limitation, not a business signal
-_SIGNAL_PENALTY = 0.05  # genuine intelligence gap
-_HIST_GAP_PENALTY = 0.01  # expected gap in historical mode
+_INFRA_PENALTY = 0.01   # data-stack limitation, not a business signal
+_SIGNAL_PENALTY = 0.025  # genuine intelligence gap
+_HIST_GAP_PENALTY = 0.005  # expected gap in historical mode
 _ERROR_PENALTY = 0.15
 _CAP = 0.40
 
