@@ -30,6 +30,13 @@ export default function SettingsPage() {
     try {
       const tok = await getTelegramToken(gt);
       window.open(tok.deep_link, "_blank", "noopener,noreferrer");
+      // Re-fetch when user returns to this tab after clicking START in Telegram
+      const onFocus = async () => {
+        window.removeEventListener("focus", onFocus);
+        const updated = await getMe(gt).catch(() => null);
+        if (updated) setUser(updated);
+      };
+      window.addEventListener("focus", onFocus);
     } catch (e: unknown) {
       setError((e as Error).message);
     } finally {
