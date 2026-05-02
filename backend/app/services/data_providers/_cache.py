@@ -4,25 +4,33 @@ Two concerns in one module because they always compose: every provider call
 goes cache-first, then rate-limit-gated if we miss, then writes back.
 
 Cache is read-through against the `signal_cache` Postgres table (already in
-the initial migration). Rate limiting is per-host, single-process asyncio —
-fine for MVP; swap to a Redis-backed limiter when we scale to multiple
-workers hitting the same SEC/Tavily host.
+the initial migration). Rate limiting is per-host, single-process asyncio.
+
+Singleflight: when multiple Celery workers miss the cache for the same key at
+the same time (e.g. two concurrent research runs on AAPL), only the first
+worker calls the external provider; the others wait and read from cache once
+the winner writes it. Implemented via Redis SET NX so the lock works across
+processes/replicas. Falls back gracefully when Redis is unavailable.
 """
 from __future__ import annotations
 
 import asyncio
 import hashlib
 import json
+import logging
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 from typing import Any, TypeVar
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.session import SessionLocal
 from app.models.db import SignalCache
+from app.services.redis_client import get_redis
 
 T = TypeVar("T")
 JsonDict = dict[str, Any]
@@ -97,6 +105,85 @@ async def cache_set(cache_key: str, payload: JsonDict, ttl_seconds: int) -> None
         await session.commit()
 
 
+# ---------------------------------------------------------------------------
+# Singleflight — distributed deduplication of concurrent cache misses
+# ---------------------------------------------------------------------------
+
+# How long to hold the Redis lock before it auto-expires (protects against
+# worker crash while holding the lock). Should be >= the slowest provider call.
+_SF_LOCK_TTL_MS: int = 30_000  # 30 seconds
+
+# Backoff schedule for loser workers waiting for the winner to populate cache.
+# Sum is ~15.5 s — well within _SF_LOCK_TTL_MS.
+_SF_POLL_DELAYS: tuple[float, ...] = (0.5, 1.0, 2.0, 4.0, 8.0)
+
+
+async def _singleflight_fetch(
+    cache_key: str,
+    fetch_fn: Callable[[], Awaitable[JsonDict]],
+    ttl_seconds: int,
+) -> JsonDict:
+    """Execute fetch_fn exactly once across concurrent workers for cache_key.
+
+    Only the worker that wins the Redis NX lock calls the external provider.
+    All other workers poll the cache with exponential backoff until the winner
+    writes the result. If the winner fails or Redis is unavailable, each worker
+    falls back to calling the provider itself (pre-existing behaviour).
+    """
+    lock_key = f"sf:{cache_key}"
+    redis_ok = True
+    acquired = False
+    try:
+        r = get_redis()
+        acquired = bool(await r.set(lock_key, "1", px=_SF_LOCK_TTL_MS, nx=True))
+    except Exception:
+        logger.debug("singleflight: Redis unavailable, skipping lock for %s", cache_key)
+        redis_ok = False
+        acquired = True  # degrade: let this worker proceed without the lock
+
+    if acquired:
+        # Double-check cache: another worker may have written it in the gap
+        # between our outer cache miss and winning the lock.
+        double_check = await cache_get(cache_key)
+        if double_check is not None:
+            if redis_ok:
+                try:
+                    await get_redis().delete(lock_key)
+                except Exception:
+                    pass
+            return double_check
+        try:
+            result = await fetch_fn()
+            await cache_set(cache_key, result, ttl_seconds)
+            return result
+        finally:
+            if redis_ok:
+                try:
+                    await get_redis().delete(lock_key)
+                except Exception:
+                    pass  # TTL will clean it up
+    else:
+        # Another worker holds the lock — wait for it to populate the cache.
+        for delay in _SF_POLL_DELAYS:
+            await asyncio.sleep(delay)
+            hit = await cache_get(cache_key)
+            if hit is not None:
+                return hit
+        # Winner timed out or failed — do the fetch ourselves without a lock.
+        logger.debug(
+            "singleflight: timed out waiting for cache on %s, fetching directly",
+            cache_key,
+        )
+        result = await fetch_fn()
+        await cache_set(cache_key, result, ttl_seconds)
+        return result
+
+
+# ---------------------------------------------------------------------------
+# cached_fetch decorator
+# ---------------------------------------------------------------------------
+
+
 def cached_fetch(
     *,
     key_fn: Callable[..., str],
@@ -107,6 +194,9 @@ def cached_fetch(
 
     The decorated fn must return a JSON-serializable dict (the thing we persist).
     Pydantic modelling happens at the agent layer, not here.
+
+    Concurrent cache misses for the same key are deduplicated via
+    `_singleflight_fetch` so only one worker hits the external provider.
     """
 
     def deco(fn: Callable[..., Awaitable[JsonDict]]) -> Callable[..., Awaitable[JsonDict]]:
@@ -116,11 +206,15 @@ def cached_fetch(
             hit = await cache_get(cache_key)
             if hit is not None:
                 return hit
-            if rate_limiter is not None:
-                await rate_limiter.acquire()
-            result = await fn(*args, **kwargs)
-            await cache_set(cache_key, result, ttl_seconds)
-            return result
+
+            # Bundle the rate-limiter acquire with the actual call so that only
+            # the singleflight winner (not the polling losers) consumes a slot.
+            async def _fetch() -> JsonDict:
+                if rate_limiter is not None:
+                    await rate_limiter.acquire()
+                return await fn(*args, **kwargs)
+
+            return await _singleflight_fetch(cache_key, _fetch, ttl_seconds)
 
         return wrapper
 
