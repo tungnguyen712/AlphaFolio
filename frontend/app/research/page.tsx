@@ -203,7 +203,7 @@ function RecentRuns() {
 }
 
 function RecentReports() {
-  const { data: reports, loading } = useReports({ limit: 10 });
+  const { data: reports, loading } = useReports({ limit: 20 });
   if (loading) return <Spinner />;
 
   return (
