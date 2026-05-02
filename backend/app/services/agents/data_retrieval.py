@@ -132,18 +132,16 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
         # Historical mode: fetch price data as of the specified date via yfinance.
         # Skip Polygon stub/live since it only returns current prices.
         price_task = _safe_price_as_of(ticker, as_of)
-        form4, tenk, events_raw, facts_raw, congress, price_summary = await asyncio.gather(
-            form4_task, tenk_task, events_task, facts_task, congress_task, price_task
+        form4, tenk, events_raw, facts_raw, congress, price_summary, consensus = await asyncio.gather(
+            form4_task, tenk_task, events_task, facts_task, congress_task, price_task, consensus_task
         )
         polygon: dict[str, Any] = {}
     else:
         polygon_task = _safe_polygon(ticker)
-        form4, tenk, events_raw, facts_raw, congress, polygon = await asyncio.gather(
-            form4_task, tenk_task, events_task, facts_task, congress_task, polygon_task
+        form4, tenk, events_raw, facts_raw, congress, polygon, consensus = await asyncio.gather(
+            form4_task, tenk_task, events_task, facts_task, congress_task, polygon_task, consensus_task
         )
         price_summary = _price_summary(polygon)
-
-    consensus = await consensus_task
 
     volume_anomalies = [
         VolumeAnomaly.model_validate(v) for v in polygon.get("volume_anomalies", [])

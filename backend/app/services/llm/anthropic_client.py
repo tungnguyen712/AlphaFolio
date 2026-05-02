@@ -30,6 +30,7 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
+    wait_random,
 )
 
 from app.config import get_settings
@@ -76,7 +77,7 @@ def get_client() -> AsyncAnthropic:
 
 @retry(
     retry=retry_if_exception_type((RateLimitError, APIStatusError)),
-    wait=wait_exponential(multiplier=1, min=2, max=30),
+    wait=wait_exponential(multiplier=1, min=2, max=30) + wait_random(0, 1),
     stop=stop_after_attempt(4),
     reraise=True,
 )

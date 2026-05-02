@@ -127,7 +127,7 @@ async def run(inputs: SynthesisInput) -> SynthesisOutput:
         system=SYSTEM_PROMPT,
         user=user_prompt,
         output_model=SynthesisOutput,
-        max_tokens=16000,
+        max_tokens=10000,
     )
     # Parse structured sections from rationale and override pass-through fields
     sections = _parse_rationale_sections(result.rationale)
