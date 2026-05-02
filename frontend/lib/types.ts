@@ -46,8 +46,17 @@ export type RebalanceTriggerKind =
   | "lockup_expiry"
   | "earnings_date"
   | "drift_threshold"
+  | "price_below"
+  | "price_above"
+  | "earnings_beat_check"
   | "custom";
-export type NotificationKind = "rebalance_trigger" | "run_complete" | "other";
+export type NotificationKind =
+  | "rebalance_trigger"
+  | "run_complete"
+  | "price_alert"
+  | "earnings_result"
+  | "watch_reminder"
+  | "other";
 
 // ---------------------------------------------------------------------------
 // Shared: VerdictLayer — embedded in every recommendation surface
@@ -259,7 +268,7 @@ export interface PendingPositionOut {
 
 export interface TriggerOut {
   id: string;
-  portfolio_id: string;
+  portfolio_id: string | null;
   kind: RebalanceTriggerKind;
   condition_json: Record<string, unknown>;
   fires_at: string | null;
@@ -330,4 +339,23 @@ export interface SimRunOut {
   portfolio_series: SimDailyPoint[] | null;
   metrics: Record<string, SimMetrics> | null;
   portfolio_metrics: SimMetrics | null;
+}
+
+// ---------------------------------------------------------------------------
+// User / Settings
+// ---------------------------------------------------------------------------
+
+export interface UserOut {
+  id: string;
+  clerk_id: string;
+  email: string | null;
+  telegram_chat_id: string | null;
+  telegram_connected: boolean;
+}
+
+export interface TelegramTokenOut {
+  token: string;
+  bot_username: string;
+  deep_link: string;
+  expires_in: number;
 }

@@ -58,6 +58,7 @@ from app.models.db import (
     RiskProfile,
 )
 from app.services.redis_client import publish_run_event
+from app.services.pipeline.condition_extractor import extract_triggers
 
 # Compile graphs once at import time. The compiled objects are stateless —
 # state lives per-invocation — so sharing them across calls is safe and cheaper
@@ -181,6 +182,25 @@ async def execute_research_run(run_id: UUID) -> SynthesisOutput:
             report_id = report.id  # UUID set by default= at construction
             session.add(report)
             await session.commit()
+
+            # Extract watch triggers from the finished report (best-effort)
+            try:
+                triggers = await extract_triggers(
+                    synth,
+                    user_id=run.user_id,
+                    report_id=report_id,
+                    ticker=synth.ticker,
+                    as_of_date=as_of,
+                )
+                if triggers:
+                    session.add_all(triggers)
+                    await session.commit()
+            except Exception as _exc:
+                # Never block the research flow on trigger extraction failure
+                import logging as _log  # noqa: PLC0415
+                _log.getLogger(__name__).warning(
+                    "extract_triggers failed for %s: %s", synth.ticker, _exc
+                )
 
             # Research BUY + portfolio context → queue pending position
             if synth.signal == ResearchSignal.BUY and portfolio_id_raw:

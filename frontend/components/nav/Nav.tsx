@@ -21,6 +21,12 @@ function notifHref(n: NotificationOut): string {
     const pid = p.portfolio_id as string | undefined;
     if (pid) return `/portfolios/${pid}/triggers`;
   }
+  if (n.kind === "price_alert" || n.kind === "earnings_result" || n.kind === "watch_reminder") {
+    const reportId = p.report_id as string | undefined;
+    if (reportId) return `/research/reports/${reportId}`;
+    const ticker = p.ticker as string | undefined;
+    if (ticker) return `/research?ticker=${ticker}`;
+  }
   return "/";
 }
 
@@ -69,6 +75,12 @@ export function Nav() {
               className={`text-sm font-medium transition-colors ${isActive("/simulation")}`}
             >
               Simulation
+            </Link>
+            <Link
+              href="/settings"
+              className={`text-sm font-medium transition-colors ${isActive("/settings")}`}
+            >
+              Settings
             </Link>
           </div>
         </div>

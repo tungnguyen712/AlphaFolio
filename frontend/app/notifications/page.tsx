@@ -20,7 +20,24 @@ function notifHref(n: NotificationOut): string {
     const pid = p.portfolio_id as string | undefined;
     if (pid) return `/portfolios/${pid}/triggers`;
   }
+  if (n.kind === "price_alert" || n.kind === "earnings_result" || n.kind === "watch_reminder") {
+    const reportId = p.report_id as string | undefined;
+    if (reportId) return `/research/reports/${reportId}`;
+    const ticker = p.ticker as string | undefined;
+    if (ticker) return `/research?ticker=${ticker}`;
+  }
   return "/";
+}
+
+function notifLabel(kind: NotificationOut["kind"]): string {
+  switch (kind) {
+    case "run_complete": return "Run completed";
+    case "rebalance_trigger": return "Rebalance trigger fired";
+    case "price_alert": return "Price alert";
+    case "earnings_result": return "Earnings result";
+    case "watch_reminder": return "Watch reminder";
+    default: return "Notification";
+  }
 }
 
 export default function NotificationsPage() {
@@ -58,11 +75,7 @@ export default function NotificationsPage() {
                   <p
                     className={`text-sm ${n.read_at ? "text-neutral-500 dark:text-zinc-400" : "font-medium text-neutral-900 dark:text-zinc-100"}`}
                   >
-                    {n.kind === "run_complete"
-                      ? "Run completed"
-                      : n.kind === "rebalance_trigger"
-                        ? "Rebalance trigger fired"
-                        : "Notification"}
+                    {(n.payload.title as string | undefined) ?? notifLabel(n.kind)}
                   </p>
                   <p className="text-xs text-neutral-400 dark:text-zinc-500">
                     {new Date(n.created_at).toLocaleString()}

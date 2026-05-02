@@ -44,9 +44,17 @@ class RebalanceTriggerKind(StrEnum):
     EARNINGS_DATE = "earnings_date"
     DRIFT_THRESHOLD = "drift_threshold"
     CUSTOM = "custom"
+    # Price-watch triggers (fires_at IS NULL — evaluated by the price-polling loop)
+    PRICE_BELOW = "price_below"
+    PRICE_ABOVE = "price_above"
+    # Fires the day after an earnings_date trigger to check actual vs estimate
+    EARNINGS_BEAT_CHECK = "earnings_beat_check"
 
 
 class NotificationKind(StrEnum):
     REBALANCE_TRIGGER = "rebalance_trigger"
     RUN_COMPLETE = "run_complete"
     OTHER = "other"
+    PRICE_ALERT = "price_alert"
+    EARNINGS_RESULT = "earnings_result"
+    WATCH_REMINDER = "watch_reminder"

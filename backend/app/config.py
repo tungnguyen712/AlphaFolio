@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     langchain_api_key: str = ""
     langchain_project: str = "alphafolio-dev"
 
+    telegram_bot_token: str | None = None
+    telegram_bot_username: str = "AlphaFolioBot"
+    telegram_webhook_secret: str = "changeme-in-production"
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]

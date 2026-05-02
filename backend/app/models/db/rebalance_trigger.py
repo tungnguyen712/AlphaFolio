@@ -14,10 +14,18 @@ from app.models.db.enums import RebalanceTriggerKind
 class RebalanceTrigger(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "rebalance_triggers"
 
-    portfolio_id: Mapped[UUID] = mapped_column(
+    # Direct FK to the owner — populated on creation; no join needed to find the user.
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # Nullable: price-watch and research-report triggers are not tied to a portfolio.
+    portfolio_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True),
         ForeignKey("portfolios.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     kind: Mapped[RebalanceTriggerKind] = mapped_column(

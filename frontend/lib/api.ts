@@ -1,4 +1,4 @@
-import type { RunSseEvent, SupplyChainReport } from "@/lib/types";
+import type { RunSseEvent, SupplyChainReport, TelegramTokenOut, UserOut } from "@/lib/types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -127,4 +127,30 @@ export async function* streamRun(
   } finally {
     reader.releaseLock();
   }
+}
+
+// ---------------------------------------------------------------------------
+// User / Settings
+// ---------------------------------------------------------------------------
+
+export async function getMe(
+  getToken: () => Promise<string | null>,
+): Promise<UserOut> {
+  return request<UserOut>("/users/me", getToken);
+}
+
+export async function patchMe(
+  updates: { telegram_chat_id: string | null },
+  getToken: () => Promise<string | null>,
+): Promise<UserOut> {
+  return request<UserOut>("/users/me", getToken, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function getTelegramToken(
+  getToken: () => Promise<string | null>,
+): Promise<TelegramTokenOut> {
+  return request<TelegramTokenOut>("/users/me/telegram-token", getToken);
 }
