@@ -2,14 +2,11 @@
 
 GET  /users/me                 → current user profile + Telegram connection status
 PATCH /users/me                → update telegram_chat_id (pass null to disconnect)
-GET  /users/me/telegram-token  → short-lived HMAC token for Telegram deep-link registration
+GET  /users/me/telegram-token  → short-lived token for Telegram deep-link registration
 """
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
-import time
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -17,10 +14,12 @@ from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUserDep, DBSessionDep
 from app.config import get_settings
+from app.services.redis_client import get_redis
 
 router = APIRouter(prefix="/users", tags=["users"])
 
 _TOKEN_TTL = 600  # 10 minutes
+_REDIS_PREFIX = "tg_link:"
 
 
 # ---------------------------------------------------------------------------
@@ -86,27 +85,15 @@ async def patch_me(
 
 @router.get("/me/telegram-token", response_model=TelegramTokenOut)
 async def get_telegram_token(user: CurrentUserDep) -> TelegramTokenOut:
-    """Return a short-lived HMAC token the user can use to link Telegram.
+    """Return a short-lived token stored in Redis for Telegram deep-link registration.
 
-    The token encodes ``{clerk_id}:{expiry_unix}`` and is signed with
-    ``TELEGRAM_WEBHOOK_SECRET`` so the webhook can verify it without a DB
-    round-trip.  The consumer opens::
-
-        https://t.me/{BOT_USERNAME}?start={token}
-
-    The Telegram bot receives ``/start {token}`` and calls PATCH /users/me
-    via our webhook handler after validating the HMAC.
+    Generates a 24-char random token (≤64 chars, within Telegram's ?start= limit).
+    Stored in Redis as ``tg_link:{token}`` → ``clerk_id`` with 10-minute TTL.
     """
     settings = get_settings()
-    expiry = int(time.time()) + _TOKEN_TTL
-    payload = f"{user.clerk_id}:{expiry}"
-    sig = hmac.new(
-        settings.telegram_webhook_secret.encode(),
-        payload.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-    token_raw = f"{payload}:{sig}"
-    token = base64.urlsafe_b64encode(token_raw.encode()).decode().rstrip("=")
+    token = secrets.token_urlsafe(16)  # 22 chars, URL-safe, no colons
+    redis = get_redis()
+    await redis.setex(f"{_REDIS_PREFIX}{token}", _TOKEN_TTL, user.clerk_id)
 
     deep_link = f"https://t.me/{settings.telegram_bot_username}?start={token}"
     return TelegramTokenOut(

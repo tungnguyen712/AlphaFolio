@@ -6,37 +6,32 @@ chat to their AlphaFolio account.
 
 Registration flow:
   1. User visits ``GET /users/me/telegram-token`` to get a deep-link URL.
-  2. User opens the link: ``t.me/{BOT}?start={token}``.
+  2. User opens the link: ``t.me/{BOT}?start={token}`` (token is a short Redis key).
   3. Telegram sends ``POST /telegram/webhook`` with the bot's received message.
-  4. This handler verifies the HMAC token, finds the user by clerk_id, stores
+  4. This handler looks up clerk_id from Redis, finds the user, stores
      ``telegram_chat_id``, and replies with a confirmation message.
 
 Security:
   - ``X-Telegram-Bot-Api-Secret-Token`` header must match ``TELEGRAM_WEBHOOK_SECRET``.
-  - HMAC token is validated; expired tokens (> 10 minutes) are rejected.
-  - Telegram always gets HTTP 200 to prevent retry storms — errors are logged
-    but not surfaced as 4xx to avoid Telegram disabling the webhook.
+  - Redis key has a 10-minute TTL and is deleted after first use.
+  - Telegram always gets HTTP 200 to prevent retry storms.
 """
 from __future__ import annotations
 
-import base64
-import hashlib
-import hmac
 import logging
-import time
 
 from fastapi import APIRouter, Header, Request, Response
 from sqlalchemy import select
 
-from app.config import get_settings
 from app.db.session import get_db
 from app.models.db import User
+from app.services.redis_client import get_redis
 from app.services.telegram import send_message as tg_send
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/telegram", tags=["telegram"])
 
-_TOKEN_TTL = 600  # must match users.py
+_REDIS_PREFIX = "tg_link:"
 
 
 # ---------------------------------------------------------------------------
@@ -49,14 +44,10 @@ async def telegram_webhook(
     request: Request,
     x_telegram_bot_api_secret_token: str | None = Header(default=None),
 ) -> Response:
-    """Receive and process a Telegram Bot API update.
-
-    Always returns HTTP 200 so Telegram does not retry — real errors are
-    logged, not propagated.
-    """
+    """Receive and process a Telegram Bot API update."""
+    from app.config import get_settings
     settings = get_settings()
 
-    # Verify shared secret
     if x_telegram_bot_api_secret_token != settings.telegram_webhook_secret:
         logger.warning("telegram_webhook: invalid secret token — ignoring update")
         return Response(content='{"ok":false}', media_type="application/json", status_code=200)
@@ -68,15 +59,13 @@ async def telegram_webhook(
 
     message = update.get("message", {})
     text: str = message.get("text", "")
-    from_data: dict = message.get("from", {})
     chat_id: int | None = message.get("chat", {}).get("id")
 
     if not text.startswith("/start ") or not chat_id:
-        # Not a registration command — silently accept
         return Response(content='{"ok":true}', media_type="application/json")
 
     token_str = text[len("/start "):].strip()
-    clerk_id, success = await _handle_registration(token_str, str(chat_id), settings)
+    clerk_id, success = await _handle_registration(token_str, str(chat_id))
 
     if success:
         await tg_send(
@@ -103,50 +92,19 @@ async def telegram_webhook(
 async def _handle_registration(
     token_str: str,
     chat_id: str,
-    settings,
 ) -> tuple[str | None, bool]:
-    """Validate HMAC token and store telegram_chat_id on the user.
+    """Look up clerk_id from Redis, store telegram_chat_id on the user."""
+    redis = get_redis()
+    redis_key = f"{_REDIS_PREFIX}{token_str}"
+    clerk_id: str | None = await redis.get(redis_key)
 
-    Returns (clerk_id, success).
-    """
-    # Decode base64url token
-    try:
-        padding = 4 - len(token_str) % 4
-        token_decoded = base64.urlsafe_b64decode(token_str + "=" * (padding % 4)).decode()
-    except Exception:
-        logger.warning("telegram_webhook: failed to decode token")
+    if not clerk_id:
+        logger.warning("telegram_webhook: unknown or expired token")
         return None, False
 
-    parts = token_decoded.split(":")
-    if len(parts) != 3:
-        logger.warning("telegram_webhook: malformed token (parts=%d)", len(parts))
-        return None, False
+    # Delete token immediately (one-time use)
+    await redis.delete(redis_key)
 
-    clerk_id, expiry_str, sig = parts
-
-    # Expiry check
-    try:
-        expiry = int(expiry_str)
-    except ValueError:
-        return None, False
-
-    if int(time.time()) > expiry:
-        logger.info("telegram_webhook: expired token for clerk_id=%s", clerk_id)
-        return clerk_id, False
-
-    # HMAC verification — constant-time compare
-    payload = f"{clerk_id}:{expiry_str}"
-    expected = hmac.new(
-        settings.telegram_webhook_secret.encode(),
-        payload.encode(),
-        hashlib.sha256,
-    ).hexdigest()
-
-    if not hmac.compare_digest(expected, sig):
-        logger.warning("telegram_webhook: HMAC mismatch for clerk_id=%s", clerk_id)
-        return clerk_id, False
-
-    # Update DB
     async for db in get_db():
         user = (
             await db.execute(select(User).where(User.clerk_id == clerk_id))
@@ -160,3 +118,4 @@ async def _handle_registration(
         return clerk_id, True
 
     return clerk_id, False
+
