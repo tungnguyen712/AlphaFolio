@@ -6,6 +6,7 @@ GET  /users/me/telegram-token  → short-lived HMAC token for Telegram deep-link
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import time
@@ -104,7 +105,8 @@ async def get_telegram_token(user: CurrentUserDep) -> TelegramTokenOut:
         payload.encode(),
         hashlib.sha256,
     ).hexdigest()
-    token = f"{payload}:{sig}"
+    token_raw = f"{payload}:{sig}"
+    token = base64.urlsafe_b64encode(token_raw.encode()).decode().rstrip("=")
 
     deep_link = f"https://t.me/{settings.telegram_bot_username}?start={token}"
     return TelegramTokenOut(

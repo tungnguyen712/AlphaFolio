@@ -19,6 +19,7 @@ Security:
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import logging
@@ -108,7 +109,15 @@ async def _handle_registration(
 
     Returns (clerk_id, success).
     """
-    parts = token_str.split(":")
+    # Decode base64url token
+    try:
+        padding = 4 - len(token_str) % 4
+        token_decoded = base64.urlsafe_b64decode(token_str + "=" * (padding % 4)).decode()
+    except Exception:
+        logger.warning("telegram_webhook: failed to decode token")
+        return None, False
+
+    parts = token_decoded.split(":")
     if len(parts) != 3:
         logger.warning("telegram_webhook: malformed token (parts=%d)", len(parts))
         return None, False
