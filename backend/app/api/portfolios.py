@@ -408,6 +408,7 @@ async def create_trigger(
     await _load_owned_portfolio(db, portfolio_id, user.id)
     trigger = RebalanceTrigger(
         portfolio_id=portfolio_id,
+        user_id=user.id,
         kind=body.kind,
         condition_json=body.condition_json,
         fires_at=body.fires_at,

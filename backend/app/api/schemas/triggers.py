@@ -20,7 +20,7 @@ class TriggerOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    portfolio_id: UUID
+    portfolio_id: UUID | None
     kind: RebalanceTriggerKind
     condition_json: dict[str, Any]
     fires_at: datetime | None

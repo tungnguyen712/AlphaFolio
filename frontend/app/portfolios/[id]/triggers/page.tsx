@@ -65,6 +65,15 @@ function formatCondition(kind: RebalanceTriggerKind, cond: Record<string, unknow
   if (kind === "macro_event") {
     return String(cond.event ?? cond.notes ?? "No details");
   }
+  if (kind === "price_below" || kind === "price_above") {
+    const ticker = cond.ticker ? String(cond.ticker).toUpperCase() : "";
+    const price = cond.price_target != null ? `$${Number(cond.price_target).toFixed(2)}` : "";
+    const label = kind === "price_below" ? "below" : "above";
+    return ticker && price ? `${ticker} ${label} ${price}` : ticker || "No condition set";
+  }
+  if (kind === "earnings_beat_check") {
+    return cond.ticker ? `EPS beat check — ${String(cond.ticker).toUpperCase()}` : "No ticker set";
+  }
   return String(cond.notes ?? "No details");
 }
 
@@ -144,6 +153,58 @@ function ConditionFields({
     );
   }
 
+  if (kind === "price_below" || kind === "price_above") {
+    return (
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Ticker</label>
+          <input
+            type="text"
+            placeholder="e.g. NVDA"
+            value={values.ticker ?? ""}
+            onChange={(e) => onChange("ticker", e.target.value.toUpperCase())}
+            className={inputClass}
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
+            Price target ($)
+          </label>
+          <input
+            type="number"
+            min={0}
+            step={0.01}
+            placeholder={kind === "price_below" ? "e.g. 200" : "e.g. 300"}
+            value={values.price_target ?? ""}
+            onChange={(e) => onChange("price_target", e.target.value)}
+            className={inputClass}
+          />
+          <p className="mt-1 text-xs text-neutral-400 dark:text-zinc-500">
+            Checked every minute during market hours (9:30–16:00 ET)
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (kind === "earnings_beat_check") {
+    return (
+      <div>
+        <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Ticker</label>
+        <input
+          type="text"
+          placeholder="e.g. AAPL"
+          value={values.ticker ?? ""}
+          onChange={(e) => onChange("ticker", e.target.value.toUpperCase())}
+          className={inputClass}
+        />
+        <p className="mt-1 text-xs text-neutral-400 dark:text-zinc-500">
+          Fires after earnings — reports whether EPS beat or missed estimates
+        </p>
+      </div>
+    );
+  }
+
   if (kind === "macro_event") {
     return (
       <div>
@@ -162,10 +223,10 @@ function ConditionFields({
   // custom
   return (
     <div>
-      <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Note</label>
+      <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Reminder note</label>
       <input
         type="text"
-        placeholder="Describe this reminder"
+        placeholder="e.g. Review TSLA position after lockup"
         value={values.notes ?? ""}
         onChange={(e) => onChange("notes", e.target.value)}
         className={inputClass}
@@ -209,6 +270,15 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
     }
     if (kind === "macro_event") {
       return condFields.event ? { event: condFields.event } : {};
+    }
+    if (kind === "price_below" || kind === "price_above") {
+      const out: Record<string, unknown> = {};
+      if (condFields.ticker) out.ticker = condFields.ticker;
+      if (condFields.price_target) out.price_target = parseFloat(condFields.price_target);
+      return out;
+    }
+    if (kind === "earnings_beat_check") {
+      return condFields.ticker ? { ticker: condFields.ticker } : {};
     }
     return condFields.notes ? { notes: condFields.notes } : {};
   };
@@ -284,21 +354,23 @@ export default function TriggersPage({ params }: { params: { id: string } }) {
             <ConditionFields kind={kind} values={condFields} onChange={handleFieldChange} />
           </div>
 
-          {/* Fires at */}
-          <div className="mb-4">
-            <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
-              Fire at date/time{kind === "custom" || kind === "macro_event" ? "" : " (optional)"}
-            </label>
-            <input
-              type="datetime-local"
-              value={firesAt}
-              onChange={(e) => setFiresAt(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-neutral-400 sm:max-w-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-            />
-            <p className="mt-1 text-xs text-neutral-400 dark:text-zinc-500">
-              Celery Beat checks every minute and fires a notification when this time is reached.
-            </p>
-          </div>
+          {/* Fires at — not used for price-based triggers */}
+          {kind !== "price_below" && kind !== "price_above" && kind !== "earnings_beat_check" && (
+            <div className="mb-4">
+              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
+                Fire at date/time{kind === "custom" || kind === "macro_event" ? "" : " (optional)"}
+              </label>
+              <input
+                type="datetime-local"
+                value={firesAt}
+                onChange={(e) => setFiresAt(e.target.value)}
+                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-neutral-400 sm:max-w-xs dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+              <p className="mt-1 text-xs text-neutral-400 dark:text-zinc-500">
+                Celery Beat checks every minute and fires a notification when this time is reached.
+              </p>
+            </div>
+          )}
 
           {createError && <p className="mb-3 text-xs text-red-600">{createError}</p>}
 
