@@ -337,7 +337,7 @@ async def _evaluate_triggers() -> int:
             user = users.get(trigger.user_id)
             if user and user.telegram_chat_id:
                 msg = f"<b>{title}</b>\n{body}"
-                asyncio.create_task(tg_send(user.telegram_chat_id, msg))
+                await tg_send(user.telegram_chat_id, msg)
 
         # ----------------------------------------------------------------
         # Loop 2: price-based triggers (fires_at IS NULL, market hours only)
@@ -422,7 +422,7 @@ async def _evaluate_triggers() -> int:
                         msg = f"<b>{title}</b>\n{body}"
                         if rationale:
                             msg += f"\n<i>{rationale}</i>"
-                        asyncio.create_task(tg_send(user.telegram_chat_id, msg))
+                        await tg_send(user.telegram_chat_id, msg)
 
         if fired:
             await session.commit()
