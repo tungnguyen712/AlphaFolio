@@ -53,7 +53,11 @@ def upgrade() -> None:
             ),
         )
 
-    existing_indexes = {idx["name"] for idx in inspector.get_indexes("simulation_runs")} if "simulation_runs" in existing_tables else set()
+    # `index=True` on user_id creates this index as part of create_table on a
+    # fresh database, so re-inspect after table creation before adding it.
+    existing_indexes = {
+        idx["name"] for idx in sa.inspect(bind).get_indexes("simulation_runs")
+    }
     if "ix_simulation_runs_user_id" not in existing_indexes:
         op.create_index("ix_simulation_runs_user_id", "simulation_runs", ["user_id"])
 

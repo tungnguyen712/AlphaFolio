@@ -51,7 +51,7 @@ jobs:
       CELERY_RESULT_BACKEND: redis://localhost:6379/2
       DEV_BYPASS_AUTH: "true"
       CLERK_SECRET_KEY: sk_test_ci
-      CLERK_PUBLISHABLE_KEY: pk_test_ci
+      CLERK_PUBLISHABLE_KEY: pk_test_YWxwaGEtZm9saW8tMS5jbGVyay5hY2NvdW50cy5kZXYk
       CLERK_JWKS_URL: ""
       CLERK_ISSUER: ""
       ANTHROPIC_API_KEY: sk-ant-ci-placeholder
@@ -105,7 +105,7 @@ jobs:
 
     env:
       NEXT_PUBLIC_API_URL: http://localhost:8000
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_YWxwaGEtZm9saW8tMS5jbGVyay5hY2NvdW50cy5kZXYk
       CLERK_SECRET_KEY: sk_test_ci
 
     steps:
