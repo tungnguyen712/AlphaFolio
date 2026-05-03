@@ -38,6 +38,10 @@ For each entity found, provide:
                      manufacturer, not a supplier.
     "subsidiary"   – owned or controlled by the filer
     "parent"       – owns or controls the filer
+    "competitor"   – explicitly named as a competitor, rival, or competing vendor
+                     in the same market or product category. Only use when the
+                     text directly identifies them as a competitor — do NOT infer
+                     from similar product descriptions alone.
 - evidence_snippet: a direct verbatim quote from the text (max 150 characters) \
 showing this relationship
 - is_significant: true if the text uses "significant", "sole-source", "primary", \
@@ -93,6 +97,8 @@ For each relationship, provide:
                      Samsung foundry, GlobalFoundries, Foxconn, Intel Foundry Services.
                      Use "manufacturer" even if the snippet says "supply" — if the
                      company is making/fabricating the product, it is a manufacturer.
+    "competitor"   – explicitly named as a competitor or rival in the same market.
+                     Only use when the text directly says they compete — do NOT infer.
 - evidence_snippet: a direct quote from the snippets (max 150 chars)
 - is_significant: true if described as "key", "major", "primary", "sole", or "largest"
 
@@ -144,6 +150,10 @@ For each relationship found, provide:
     "subsidiary"   – owned or controlled by the subject company (acquired companies,
                      wholly-owned divisions that are separate legal entities)
     "parent"       – owns or controls the subject company
+    "competitor"   – explicitly named as a competitor, rival, or competing company
+                     in the same market or product category. Only use when the
+                     article directly states they compete — do NOT infer from
+                     similar business descriptions alone.
 - evidence_snippet: a direct verbatim quote from the article (max 150 characters)
 - is_significant: true if described as "key", "major", "primary", "largest",
   "strategic", "exclusive", or "primary" partner, or if a percentage is given

@@ -10,11 +10,12 @@ import { Spinner } from "@/components/ui/Spinner";
 import type { RelatedCompany, RelationshipKind } from "@/lib/types";
 
 const GROUP_CONFIG: { kind: RelationshipKind; title: string; empty: string }[] = [
-  { kind: "supplier", title: "Suppliers", empty: "No suppliers found in filings" },
-  { kind: "customer", title: "Customers", empty: "No customers found in filings" },
+  { kind: "supplier",     title: "Suppliers",     empty: "No suppliers found in filings" },
+  { kind: "customer",     title: "Customers",     empty: "No customers found in filings" },
   { kind: "manufacturer", title: "Manufacturers", empty: "No contract manufacturers found" },
-  { kind: "parent", title: "Parent Company", empty: "No parent organization found" },
-  { kind: "subsidiary", title: "Subsidiaries", empty: "No subsidiaries found" },
+  { kind: "competitor",   title: "Competitors",   empty: "No competitors identified in filings" },
+  { kind: "parent",       title: "Parent Company",empty: "No parent organization found" },
+  { kind: "subsidiary",   title: "Subsidiaries",  empty: "No subsidiaries found" },
 ];
 
 function groupBy(rels: RelatedCompany[]): Record<RelationshipKind, RelatedCompany[]> {

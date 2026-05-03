@@ -75,7 +75,7 @@ def _normalize_name(name: str) -> str:
 
 
 async def _cached_haiku_extract(ticker: str, text: str) -> SupplyChainEntities:
-    key = make_cache_key("sc.10k.haiku.v7", ticker=ticker.upper())
+    key = make_cache_key("sc.10k.haiku.v8", ticker=ticker.upper())
     cached = await cache_get(key)
     if cached is not None:
         return SupplyChainEntities.model_validate(cached)
@@ -85,7 +85,7 @@ async def _cached_haiku_extract(ticker: str, text: str) -> SupplyChainEntities:
 
 
 async def _cached_tavily_extract(ticker: str, snippets: list[dict]) -> SupplyChainEntities:
-    key = make_cache_key("sc.tavily.haiku.v4", ticker=ticker.upper())
+    key = make_cache_key("sc.tavily.haiku.v5", ticker=ticker.upper())
     cached = await cache_get(key)
     if cached is not None:
         return SupplyChainEntities.model_validate(cached)
@@ -95,7 +95,7 @@ async def _cached_tavily_extract(ticker: str, snippets: list[dict]) -> SupplyCha
 
 
 async def _cached_wiki_extract(ticker: str, text: str) -> SupplyChainEntities:
-    key = make_cache_key("sc.wiki.haiku.v1", ticker=ticker.upper())
+    key = make_cache_key("sc.wiki.haiku.v2", ticker=ticker.upper())
     cached = await cache_get(key)
     if cached is not None:
         return SupplyChainEntities.model_validate(cached)
@@ -115,7 +115,7 @@ async def _safe_wikidata(company_name: str) -> list[RelatedCompany]:
         rels: list[RelatedCompany] = []
         for e in data.get("entities", []):
             rel_type = e.get("relationship", "subsidiary")
-            if rel_type not in ("supplier", "customer", "subsidiary", "parent", "manufacturer"):
+            if rel_type not in ("supplier", "customer", "subsidiary", "parent", "manufacturer", "competitor"):
                 continue
             rels.append(
                 RelatedCompany(
@@ -176,7 +176,7 @@ async def _safe_wikipedia(company_name: str, ticker: str) -> list[RelatedCompany
         entities = await _cached_wiki_extract(ticker, text)
         rels: list[RelatedCompany] = []
         for e in entities.entities:
-            if e.relationship not in ("supplier", "customer", "manufacturer", "subsidiary", "parent"):
+            if e.relationship not in ("supplier", "customer", "manufacturer", "subsidiary", "parent", "competitor"):
                 continue
             rels.append(
                 RelatedCompany(
@@ -254,7 +254,7 @@ async def _safe_tavily(ticker: str) -> list[RelatedCompany]:
         entities = await _cached_tavily_extract(ticker, snippets)
         rels: list[RelatedCompany] = []
         for e in entities.entities:
-            if e.relationship not in ("supplier", "customer", "manufacturer"):
+            if e.relationship not in ("supplier", "customer", "manufacturer", "competitor"):
                 continue
             rels.append(
                 RelatedCompany(

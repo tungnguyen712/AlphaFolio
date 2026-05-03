@@ -14,19 +14,21 @@ import {
 } from "@xyflow/react";
 import type { SupplyChainReport, RelationshipKind } from "@/lib/types";
 
-// Only show these three — parent/subsidiary live in the Cards view
-const SHOWN_KINDS: RelationshipKind[] = ["supplier", "customer", "manufacturer"];
+// Only show these four — parent/subsidiary live in the Cards view
+const SHOWN_KINDS: RelationshipKind[] = ["supplier", "customer", "manufacturer", "competitor"];
 
 const REL_COLOR: Record<string, { bg: string; text: string; border: string }> = {
   supplier:     { bg: "#3f3f46", text: "#e4e4e7", border: "#71717a" },
   customer:     { bg: "#1e3a5f", text: "#bfdbfe", border: "#3b82f6" },
   manufacturer: { bg: "#14532d", text: "#bbf7d0", border: "#22c55e" },
+  competitor:   { bg: "#4c1d1d", text: "#fecaca", border: "#ef4444" },
 };
 
 const GROUP_LABEL: Record<string, string> = {
-  supplier: "Suppliers",
-  customer: "Customers",
+  supplier:     "Suppliers",
+  customer:     "Customers",
   manufacturer: "Manufacturers",
+  competitor:   "Competitors",
 };
 
 // ── Custom node: dotted group boundary ────────────────────────────────────────

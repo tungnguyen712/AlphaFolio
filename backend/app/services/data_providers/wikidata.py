@@ -98,7 +98,7 @@ async def _resolve_qid(company_name: str) -> dict[str, Any]:
 
 
 def _relations_key(company_name: str) -> str:
-    return make_cache_key("wikidata.relations.v2", name=company_name.strip().upper())
+    return make_cache_key("wikidata.relations.v3", name=company_name.strip().upper())
 
 
 @cached_fetch(key_fn=_relations_key, ttl_seconds=_RELATIONS_TTL)
@@ -135,11 +135,15 @@ SELECT DISTINCT ?rel ?relLabel ?relTicker ?relType WHERE {{
   }} UNION {{
     wd:{qid} wdt:P176 ?rel .
     BIND("manufacturer" AS ?relType)
+  }} UNION {{
+    wd:{qid} wdt:P2286 ?rel .
+    FILTER(?rel != wd:{qid})
+    BIND("competitor" AS ?relType)
   }}
   OPTIONAL {{ ?rel wdt:P249 ?relTicker }}
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en" . }}
 }}
-LIMIT 50
+LIMIT 75
 """
 
     try:

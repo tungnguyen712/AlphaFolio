@@ -13,7 +13,8 @@ export type RelationshipKind =
   | "customer"
   | "subsidiary"
   | "parent"
-  | "manufacturer";
+  | "manufacturer"
+  | "competitor";
 export type ConfidenceLevel = "high" | "medium" | "low";
 
 export interface RelatedCompany {

@@ -5,7 +5,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-RelationshipKind = Literal["supplier", "customer", "subsidiary", "parent", "manufacturer"]
+RelationshipKind = Literal["supplier", "customer", "subsidiary", "parent", "manufacturer", "competitor"]
 ConfidenceLevel = Literal["high", "medium", "low"]
 
 
