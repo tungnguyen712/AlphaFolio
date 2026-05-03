@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: alphafolio
+          POSTGRES_PASSWORD: alphafolio_dev
+          POSTGRES_DB: alphafolio_test
+        ports:
+          - "5432:5432"
+        options: >-
+          --health-cmd "pg_isready -U alphafolio -d alphafolio_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - "6379:6379"
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    defaults:
+      run:
+        working-directory: backend
+
+    env:
+      APP_ENV: development
+      LOG_LEVEL: INFO
+      DATABASE_URL: postgresql+asyncpg://alphafolio:alphafolio_dev@localhost:5432/alphafolio_test
+      ALEMBIC_DATABASE_URL: postgresql://alphafolio:alphafolio_dev@localhost:5432/alphafolio_test
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_BROKER_URL: redis://localhost:6379/1
+      CELERY_RESULT_BACKEND: redis://localhost:6379/2
+      DEV_BYPASS_AUTH: "true"
+      CLERK_SECRET_KEY: sk_test_ci
+      CLERK_PUBLISHABLE_KEY: pk_test_ci
+      CLERK_JWKS_URL: ""
+      CLERK_ISSUER: ""
+      ANTHROPIC_API_KEY: sk-ant-ci-placeholder
+      ANTHROPIC_MODEL_OPUS: claude-opus-4-7
+      ANTHROPIC_MODEL_SONNET: claude-sonnet-4-6
+      ANTHROPIC_MODEL_HAIKU: claude-haiku-4-5-20251001
+      SEC_EDGAR_USER_AGENT: AlphaFolio CI ci@example.com
+      TAVILY_API_KEY: tvly-ci-placeholder
+      POLYGON_API_KEY: ""
+      FINNHUB_API_KEY: ci-placeholder
+      POLYGON_STUB_FIXTURES: ./tests/fixtures/polygon
+      QUIVER_STUB_FIXTURES: ./tests/fixtures/quiver
+      LANGCHAIN_TRACING_V2: "false"
+      LANGCHAIN_API_KEY: ""
+      LANGCHAIN_PROJECT: alphafolio-ci
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: python -m pip install uv==0.4.20
+
+      - name: Install backend dependencies
+        run: uv sync --all-extras
+
+      - name: Run migrations
+        run: uv run alembic upgrade head
+
+      - name: Ruff
+        run: uv run ruff check .
+
+      - name: Mypy
+        run: uv run mypy app
+
+      - name: Pytest
+        run: uv run pytest
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: pk_test_ci
+      CLERK_SECRET_KEY: sk_test_ci
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
