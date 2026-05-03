@@ -48,3 +48,4 @@ build/
 *.egg
 .claude/
 CLAUDE.MD
+*.tsbuildinfo
