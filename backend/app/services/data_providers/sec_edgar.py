@@ -379,9 +379,9 @@ def _text(node: ET.Element, xpath: str) -> str:
     return (found.text or "").strip() if found is not None and found.text else ""
 
 
-def _as_float(s: str) -> float | None:
+def _as_float(s: str | None) -> float | None:
     try:
-        return float(s)
+        return float(s) if s is not None else None
     except (TypeError, ValueError):
         return None
 

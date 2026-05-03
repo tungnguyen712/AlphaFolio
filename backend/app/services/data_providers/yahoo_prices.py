@@ -264,8 +264,9 @@ def _fetch_ohlcv_sync_batch(
             series = []
             for ts, price in closes.items():
                 if price is not None and not math.isnan(float(price)):
+                    import pandas as pd
                     series.append({
-                        "date": ts.date() if hasattr(ts, "date") else ts,
+                        "date": pd.Timestamp(str(ts)).date(),
                         "close": float(price),
                     })
             result[ticker] = series
