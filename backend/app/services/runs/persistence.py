@@ -7,7 +7,7 @@ Two-phase design (split in stage 4.2):
                              so it can return 202 + run_id without blocking
                              on graph execution.
 
-  execute_*_run(run_id)   -> loads the queued row, transitions to RUNNING,
+  execute_*_run(run_id)   -> locks the queued row, transitions to RUNNING,
                              streams the graph (writing one agent_run_steps
                              row per node), persists the flow-specific
                              report, transitions to COMPLETE / FAILED.
@@ -118,18 +118,13 @@ async def enqueue_research_run(
 async def execute_research_run(run_id: UUID) -> SynthesisOutput:
     """Load a queued run, execute the research graph, persist outputs.
 
-    Idempotency caveat: if called twice on the same run_id, the second call
-    will overwrite step rows and produce a second research_report row tied
-    to the same run. The Celery task layer dispatches once per run_id, so
-    in normal operation this isn't a concern.
+    Idempotency guard: only QUEUED rows may transition into execution. The
+    row is locked while the status flips to RUNNING, so Celery redeliveries
+    and retries cannot run the same graph twice for one run_id.
     """
     async with SessionLocal() as session:
-        run = await _load_run(session, run_id)
+        run = await _claim_queued_run(session, run_id)
         queued_inputs = (run.graph_state or {}).get("_queued_inputs") or {}
-
-        run.status = AgentRunStatus.RUNNING
-        run.started_at = datetime.now(UTC)
-        await session.commit()
         asyncio.create_task(
             publish_run_event(run_id, {"type": "status", "status": "running"})
         )
@@ -297,12 +292,8 @@ async def enqueue_portfolio_run(
 
 async def execute_portfolio_run(run_id: UUID) -> PortfolioConstructionOutput:
     async with SessionLocal() as session:
-        run = await _load_run(session, run_id)
+        run = await _claim_queued_run(session, run_id)
         q = (run.graph_state or {}).get("_queued_inputs") or {}
-
-        run.status = AgentRunStatus.RUNNING
-        run.started_at = datetime.now(UTC)
-        await session.commit()
         asyncio.create_task(
             publish_run_event(run_id, {"type": "status", "status": "running"})
         )
@@ -376,11 +367,27 @@ async def run_portfolio(
 # ===========================================================================
 
 
-async def _load_run(session: AsyncSession, run_id: UUID) -> AgentRun:
-    result = await session.execute(select(AgentRun).where(AgentRun.id == run_id))
+async def _claim_queued_run(session: AsyncSession, run_id: UUID) -> AgentRun:
+    """Atomically claim a queued run for execution.
+
+    `FOR UPDATE` serializes competing workers. The first caller flips the row
+    to RUNNING; any later caller observes RUNNING/COMPLETE/FAILED and exits
+    before streaming graph steps or creating flow-specific output rows.
+    """
+    result = await session.execute(
+        select(AgentRun).where(AgentRun.id == run_id).with_for_update()
+    )
     run = result.scalar_one_or_none()
     if run is None:
         raise LookupError(f"agent_run {run_id} not found")
+    if run.status != AgentRunStatus.QUEUED:
+        raise RuntimeError(
+            f"agent_run {run_id} has status {run.status}; only queued runs can execute"
+        )
+
+    run.status = AgentRunStatus.RUNNING
+    run.started_at = datetime.now(UTC)
+    await session.commit()
     return run
 
 

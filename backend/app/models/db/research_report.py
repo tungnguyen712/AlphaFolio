@@ -2,7 +2,7 @@ from datetime import date
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Date, Float, ForeignKey, String
+from sqlalchemy import Date, Float, ForeignKey, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -13,6 +13,7 @@ from app.models.db.enums import ResearchSignal
 
 class ResearchReport(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "research_reports"
+    __table_args__ = (UniqueConstraint("run_id", name="uq_research_reports_run_id"),)
 
     user_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),

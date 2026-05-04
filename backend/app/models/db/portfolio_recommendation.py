@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -11,6 +11,9 @@ from app.db.base import Base, TimestampMixin, UUIDPKMixin
 
 class PortfolioRecommendation(Base, UUIDPKMixin, TimestampMixin):
     __tablename__ = "portfolio_recommendations"
+    __table_args__ = (
+        UniqueConstraint("run_id", name="uq_portfolio_recommendations_run_id"),
+    )
 
     portfolio_id: Mapped[UUID] = mapped_column(
         PG_UUID(as_uuid=True),

@@ -42,7 +42,14 @@ from app.models.db import (
     RiskProfile,
     User,
 )
-from app.services.runs.persistence import run_portfolio, run_research
+from app.services.runs.persistence import (
+    enqueue_portfolio_run,
+    enqueue_research_run,
+    execute_portfolio_run,
+    execute_research_run,
+    run_portfolio,
+    run_research,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -187,8 +194,10 @@ class _FakeGraph:
 
     def __init__(self, updates):
         self._updates = updates
+        self.calls = 0
 
     def astream(self, initial, stream_mode="updates"):  # noqa: ARG002
+        self.calls += 1
         updates = self._updates
 
         async def _gen():
@@ -287,6 +296,32 @@ async def test_run_research_marks_failed_on_exception(user_id):
         assert reports == []
 
 
+async def test_execute_research_run_refuses_completed_run(user_id):
+    fake = _FakeGraph(_research_updates("NVDA"))
+    run_id = await enqueue_research_run(user_id=user_id, ticker="NVDA")
+
+    with patch("app.services.runs.persistence._research_graph", fake):
+        await execute_research_run(run_id)
+
+    empty_graph = _FakeGraph([])
+    with patch("app.services.runs.persistence._research_graph", empty_graph):
+        with pytest.raises(RuntimeError, match="only queued runs can execute"):
+            await execute_research_run(run_id)
+
+    assert empty_graph.calls == 0
+
+    async with SessionLocal() as session:
+        steps = (
+            await session.execute(select(AgentRunStep).where(AgentRunStep.run_id == run_id))
+        ).scalars().all()
+        reports = (
+            await session.execute(select(ResearchReport).where(ResearchReport.run_id == run_id))
+        ).scalars().all()
+
+    assert len(steps) == 5
+    assert len(reports) == 1
+
+
 # ---------------------------------------------------------------------------
 # Portfolio persistence
 # ---------------------------------------------------------------------------
@@ -331,3 +366,47 @@ async def test_run_portfolio_persists_recommendation(user_id, portfolio_id):
         ).scalar_one()
         assert pr.portfolio_id == portfolio_id
         assert pr.recommendation_json["proposed_trades"][0]["ticker"] == "NVDA"
+
+
+async def test_execute_portfolio_run_refuses_completed_run(user_id, portfolio_id):
+    run_id = await enqueue_portfolio_run(
+        user_id=user_id,
+        portfolio_id=portfolio_id,
+        holdings=[
+            HoldingSnapshot(
+                ticker="MSFT",
+                shares=Decimal("10"),
+                avg_cost=Decimal("310"),
+                asset_class=AssetClass.ESTABLISHED,
+            )
+        ],
+        cash_balance=Decimal("5000"),
+        risk_profile=RiskProfile.MODERATE,
+        candidates=[_synthesis_output("NVDA")],
+    )
+
+    with patch(
+        "app.services.runs.persistence._portfolio_graph",
+        _FakeGraph([_portfolio_update(str(portfolio_id))]),
+    ):
+        await execute_portfolio_run(run_id)
+
+    empty_graph = _FakeGraph([])
+    with patch("app.services.runs.persistence._portfolio_graph", empty_graph):
+        with pytest.raises(RuntimeError, match="only queued runs can execute"):
+            await execute_portfolio_run(run_id)
+
+    assert empty_graph.calls == 0
+
+    async with SessionLocal() as session:
+        steps = (
+            await session.execute(select(AgentRunStep).where(AgentRunStep.run_id == run_id))
+        ).scalars().all()
+        recommendations = (
+            await session.execute(
+                select(PortfolioRecommendation).where(PortfolioRecommendation.run_id == run_id)
+            )
+        ).scalars().all()
+
+    assert len(steps) == 1
+    assert len(recommendations) == 1
