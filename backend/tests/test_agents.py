@@ -229,7 +229,7 @@ async def test_market_intel_uses_sonnet_and_wraps_provider_data() -> None:
             side_effect=fake_call_structured,
         ),
     ):
-        out = await market_intel.run(MarketIntelInput(ticker="NVDA", lookback_days=14))
+        out = await market_intel.run(MarketIntelInput(ticker="NVDA", lookback_days=30))
 
     assert isinstance(out, MarketIntelOutput)
     assert out.ticker == "NVDA"

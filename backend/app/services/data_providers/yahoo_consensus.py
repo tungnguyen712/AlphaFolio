@@ -161,9 +161,20 @@ async def fetch_consensus(ticker: str) -> ConsensusData | None:
         logger.warning("yahoo_consensus: fetch failed for %s", ticker, exc_info=True)
         return None
 
-    fin: dict[str, Any] = raw.get("financial_data", {})
-    trend: dict[str, Any] = raw.get("recommendation_trend", {})
-    eps: dict[str, Any] = raw.get("eps_estimates", {})
+    fin_raw = raw.get("financial_data", {})
+    trend_raw = raw.get("recommendation_trend", {})
+    eps_raw = raw.get("eps_estimates", {})
+    if not isinstance(fin_raw, dict):
+        logger.warning("yahoo_consensus: malformed financial_data for %s", ticker)
+        return None
+    if not isinstance(trend_raw, dict):
+        trend_raw = {}
+    if not isinstance(eps_raw, dict):
+        eps_raw = {}
+
+    fin: dict[str, Any] = fin_raw
+    trend: dict[str, Any] = trend_raw
+    eps: dict[str, Any] = eps_raw
 
     current_price = _safe_float(fin.get("currentPrice"))
     target_mean = _safe_float(fin.get("targetMeanPrice"))

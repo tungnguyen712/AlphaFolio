@@ -85,6 +85,7 @@ async def test_evaluate_triggers_fires_due_trigger_and_creates_notification(
         await session.refresh(pf)
 
         trigger = RebalanceTrigger(
+            user_id=test_user.id,
             portfolio_id=pf.id,
             kind=RebalanceTriggerKind.EARNINGS_DATE,
             condition_json={"note": "Q1"},
@@ -136,6 +137,7 @@ async def test_evaluate_triggers_skips_future_trigger(test_user: User):
         await session.refresh(pf)
 
         trigger = RebalanceTrigger(
+            user_id=test_user.id,
             portfolio_id=pf.id,
             kind=RebalanceTriggerKind.CUSTOM,
             condition_json={},
