@@ -14,12 +14,12 @@ already records the failure in Postgres and retrying won't help.
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import UTC, datetime
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
 import httpx
+import structlog
 from sqlalchemy import select
 
 from app.db.session import SessionLocal, engine as db_engine
@@ -31,7 +31,7 @@ from app.workers.celery_app import celery_app
 
 _ET = ZoneInfo("America/New_York")
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Transient error classification
@@ -83,6 +83,7 @@ def run_research_task(self, run_id: str) -> str:  # type: ignore[override]
         await db_engine.dispose(close=False)
         await execute_research_run(UUID(run_id))
 
+    logger.info("research_task_dispatch", run_id=run_id, attempt=self.request.retries + 1)
     try:
         asyncio.run(_run())
     except Exception as exc:
@@ -121,6 +122,7 @@ def run_portfolio_task(self, run_id: str) -> str:  # type: ignore[override]
         await db_engine.dispose(close=False)
         await execute_portfolio_run(UUID(run_id))
 
+    logger.info("portfolio_task_dispatch", run_id=run_id, attempt=self.request.retries + 1)
     try:
         asyncio.run(_run())
     except Exception as exc:

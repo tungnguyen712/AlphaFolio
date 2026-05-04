@@ -8,6 +8,10 @@ from app.api import notifications, portfolios, research, runs, simulation, suppl
 from app.auth.clerk import require_auth_configured_or_dev_bypass
 from app.config import get_settings
 from app.db.session import engine
+from app.logging import RequestLoggingMiddleware, configure_logging
+
+
+configure_logging()
 
 
 @asynccontextmanager
@@ -23,6 +27,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     app = FastAPI(title="AlphaFolio", version="0.1.0", lifespan=lifespan)
 
+    app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origin_list,

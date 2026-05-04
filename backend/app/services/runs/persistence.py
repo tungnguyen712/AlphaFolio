@@ -30,6 +30,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+import structlog
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -65,6 +66,7 @@ from app.services.pipeline.condition_extractor import extract_triggers
 # than rebuilding per request.
 _research_graph = build_research_graph()
 _portfolio_graph = build_portfolio_graph()
+logger = structlog.get_logger(__name__)
 
 
 # ===========================================================================
@@ -112,6 +114,14 @@ async def enqueue_research_run(
         session.add(run)
         await session.commit()
         await session.refresh(run)
+        logger.info(
+            "agent_run_enqueued",
+            run_id=str(run.id),
+            user_id=str(user_id),
+            flow=flow.value,
+            ticker=stored_ticker,
+            mode=mode,
+        )
         return run.id
 
 
@@ -177,6 +187,13 @@ async def execute_research_run(run_id: UUID) -> SynthesisOutput:
             report_id = report.id  # UUID set by default= at construction
             session.add(report)
             await session.commit()
+            logger.info(
+                "research_report_persisted",
+                run_id=str(run_id),
+                report_id=str(report_id),
+                ticker=synth.ticker,
+                signal=synth.signal.value,
+            )
 
             # Extract watch triggers from the finished report (best-effort)
             try:
@@ -287,6 +304,13 @@ async def enqueue_portfolio_run(
         session.add(run)
         await session.commit()
         await session.refresh(run)
+        logger.info(
+            "agent_run_enqueued",
+            run_id=str(run.id),
+            user_id=str(user_id),
+            flow=AgentRunFlow.PORTFOLIO.value,
+            portfolio_id=str(portfolio_id),
+        )
         return run.id
 
 
@@ -325,6 +349,12 @@ async def execute_portfolio_run(run_id: UUID) -> PortfolioConstructionOutput:
             )
             session.add(recommendation)
             await session.commit()
+            logger.info(
+                "portfolio_recommendation_persisted",
+                run_id=str(run_id),
+                recommendation_id=str(recommendation.id),
+                portfolio_id=q["portfolio_id"],
+            )
 
             asyncio.create_task(
                 publish_run_event(run_id, {"type": "done", "status": "complete"})
@@ -381,6 +411,12 @@ async def _claim_queued_run(session: AsyncSession, run_id: UUID) -> AgentRun:
     if run is None:
         raise LookupError(f"agent_run {run_id} not found")
     if run.status != AgentRunStatus.QUEUED:
+        logger.info(
+            "agent_run_execution_refused",
+            run_id=str(run_id),
+            status=run.status.value,
+            flow=run.flow.value,
+        )
         raise RuntimeError(
             f"agent_run {run_id} has status {run.status}; only queued runs can execute"
         )
@@ -388,6 +424,13 @@ async def _claim_queued_run(session: AsyncSession, run_id: UUID) -> AgentRun:
     run.status = AgentRunStatus.RUNNING
     run.started_at = datetime.now(UTC)
     await session.commit()
+    logger.info(
+        "agent_run_claimed",
+        run_id=str(run.id),
+        user_id=str(run.user_id),
+        flow=run.flow.value,
+        ticker=run.ticker,
+    )
     return run
 
 
@@ -429,6 +472,11 @@ async def _stream_and_persist(
                 "error": None,
                 "completed_at": step_completed_at.isoformat(),
             })
+            logger.info(
+                "agent_run_step_completed",
+                run_id=str(run_id),
+                agent_name=node_name,
+            )
         await session.commit()
         for event in pending_events:
             asyncio.create_task(publish_run_event(run_id, event))
@@ -447,6 +495,12 @@ async def _finalize_run(
     # bookkeeping for the worker, not part of the run's deliverable.
     run.graph_state = _to_jsonable(final_state)
     await session.commit()
+    logger.info(
+        "agent_run_completed",
+        run_id=str(run.id),
+        flow=run.flow.value,
+        latency_ms=_run_latency_ms(run),
+    )
 
 
 async def _fail_run(session: AsyncSession, run: AgentRun, exc: BaseException) -> None:
@@ -474,6 +528,13 @@ async def _fail_run(session: AsyncSession, run: AgentRun, exc: BaseException) ->
         )
     )
     await session.commit()
+    logger.warning(
+        "agent_run_failed",
+        run_id=str(run.id),
+        flow=run.flow.value,
+        error=error_msg,
+        latency_ms=_run_latency_ms(run),
+    )
     asyncio.create_task(
         publish_run_event(
             run.id,
@@ -503,3 +564,9 @@ def _to_jsonable(obj: Any) -> Any:
     if isinstance(obj, (date, datetime)):
         return obj.isoformat()
     return obj
+
+
+def _run_latency_ms(run: AgentRun) -> float | None:
+    if run.started_at is None or run.completed_at is None:
+        return None
+    return round((run.completed_at - run.started_at).total_seconds() * 1000, 2)

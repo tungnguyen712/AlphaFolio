@@ -18,13 +18,13 @@ import asyncio
 import hashlib
 import json
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 from typing import Any, TypeVar
 
-logger = logging.getLogger(__name__)
-
+import structlog
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -34,6 +34,8 @@ from app.services.redis_client import get_redis
 
 T = TypeVar("T")
 JsonDict = dict[str, Any]
+logger = logging.getLogger(__name__)
+structured_logger = structlog.get_logger(__name__)
 
 
 class AsyncRateLimiter:
@@ -203,18 +205,53 @@ def cached_fetch(
         @wraps(fn)
         async def wrapper(*args: Any, **kwargs: Any) -> JsonDict:
             cache_key = key_fn(*args, **kwargs)
+            provider_name = f"{fn.__module__}.{fn.__name__}"
+            started = time.perf_counter()
             hit = await cache_get(cache_key)
             if hit is not None:
+                structured_logger.info(
+                    "provider_cache_hit",
+                    provider=provider_name,
+                    cache_key=cache_key,
+                    latency_ms=round((time.perf_counter() - started) * 1000, 2),
+                )
                 return hit
 
             # Bundle the rate-limiter acquire with the actual call so that only
             # the singleflight winner (not the polling losers) consumes a slot.
             async def _fetch() -> JsonDict:
+                fetch_started = time.perf_counter()
                 if rate_limiter is not None:
                     await rate_limiter.acquire()
-                return await fn(*args, **kwargs)
+                try:
+                    result = await fn(*args, **kwargs)
+                except Exception as exc:
+                    structured_logger.warning(
+                        "provider_fetch_failed",
+                        provider=provider_name,
+                        cache_key=cache_key,
+                        latency_ms=round((time.perf_counter() - fetch_started) * 1000, 2),
+                        error=str(exc),
+                        exc_info=True,
+                    )
+                    raise
+                structured_logger.info(
+                    "provider_fetch_completed",
+                    provider=provider_name,
+                    cache_key=cache_key,
+                    cache_hit=False,
+                    latency_ms=round((time.perf_counter() - fetch_started) * 1000, 2),
+                )
+                return result
 
-            return await _singleflight_fetch(cache_key, _fetch, ttl_seconds)
+            result = await _singleflight_fetch(cache_key, _fetch, ttl_seconds)
+            structured_logger.info(
+                "provider_cache_miss_completed",
+                provider=provider_name,
+                cache_key=cache_key,
+                latency_ms=round((time.perf_counter() - started) * 1000, 2),
+            )
+            return result
 
         return wrapper
 
