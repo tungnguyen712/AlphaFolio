@@ -24,7 +24,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Header, HTTPException, Query, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import delete, select
@@ -243,6 +243,8 @@ async def stream_run_events(
     run_id: UUID,
     user: CurrentUserDep,
     db: DBSessionDep,
+    last_event_id_header: str | None = Header(default=None, alias="Last-Event-ID"),
+    last_event_id_query: str | None = Query(default=None, alias="last_event_id"),
 ) -> StreamingResponse:
     """SSE stream of agent-step events for a run.
 
@@ -250,49 +252,48 @@ async def stream_run_events(
     the run transitions to RUNNING, and a terminal `done` event on completion
     or failure. Clients should close the connection after receiving `done`.
 
-    Connects to an already-finished run replay all steps from DB immediately
-    and sends `done` without waiting on Redis.
+    Connects to an already-finished run replay DB steps after Last-Event-ID
+    immediately and sends `done` without waiting on Redis.
     """
     # Ownership check must happen HERE, before the StreamingResponse is
     # returned. HTTPException raised inside an async generator fires after
     # headers are already committed (Starlette sends 200 before iterating the
     # body), so a 404 inside the generator can't reach the client correctly.
     run = await _load_owned_run(db, run_id, user.id)
+    last_event_id = last_event_id_header or last_event_id_query
     return StreamingResponse(
-        _run_event_generator(run_id, run.status),
+        _run_event_generator(run_id, run.status, last_event_id),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
 async def _run_event_generator(
-    run_id: UUID, run_status: AgentRunStatus
+    run_id: UUID, run_status: AgentRunStatus, last_event_id: str | None = None
 ) -> AsyncIterator[bytes]:
-    def sse(payload: dict[str, Any]) -> bytes:
-        return f"data: {json.dumps(payload)}\n\n".encode()
+    def sse(payload: dict[str, Any], event_id: str | None = None) -> bytes:
+        prefix = f"id: {event_id}\n" if event_id else ""
+        return f"{prefix}data: {json.dumps(payload)}\n\n".encode()
 
     # Terminal path: replay DB steps then close immediately.
     if run_status in (AgentRunStatus.COMPLETE, AgentRunStatus.FAILED):
         async with SessionLocal() as db:
             rows = (
-                await db.execute(
-                    select(AgentRunStep)
-                    .where(AgentRunStep.run_id == run_id)
-                    .order_by(AgentRunStep.completed_at.nulls_last())
-                )
+                await db.execute(_steps_stmt(run_id))
             ).scalars().all()
         error_text: str | None = None
-        for r in rows:
+        for r in _steps_after_last_event_id(rows, last_event_id):
             if r.agent_name == "_error":
                 error_text = r.error
             else:
                 yield sse({
                     "type": "step",
+                    "id": str(r.id),
                     "agent_name": r.agent_name,
                     "output": r.output,
                     "error": r.error,
                     "completed_at": r.completed_at.isoformat() if r.completed_at else None,
-                })
+                }, str(r.id))
         yield sse({
             "type": "done",
             "status": run_status.value,
@@ -308,11 +309,7 @@ async def _run_event_generator(
 
         async with SessionLocal() as db:
             rows = (
-                await db.execute(
-                    select(AgentRunStep)
-                    .where(AgentRunStep.run_id == run_id)
-                    .order_by(AgentRunStep.completed_at.nulls_last())
-                )
+                await db.execute(_steps_stmt(run_id))
             ).scalars().all()
             # Re-check status in the same session — run may have completed
             # between the ownership check and the subscription.
@@ -323,18 +320,19 @@ async def _run_event_generator(
             ).scalar_one()
             current_status = fresh_run.status
 
-        seen: set[tuple[str, str | None]] = set()
-        for r in rows:
+        seen: set[str] = set()
+        for r in _steps_after_last_event_id(rows, last_event_id):
             if r.agent_name != "_error":
-                key = (r.agent_name, r.completed_at.isoformat() if r.completed_at else None)
-                seen.add(key)
+                event_id = str(r.id)
+                seen.add(event_id)
                 yield sse({
                     "type": "step",
+                    "id": event_id,
                     "agent_name": r.agent_name,
                     "output": r.output,
                     "error": r.error,
                     "completed_at": r.completed_at.isoformat() if r.completed_at else None,
-                })
+                }, event_id)
 
         # If run completed while we were setting up, emit done and return.
         if current_status in (AgentRunStatus.COMPLETE, AgentRunStatus.FAILED):
@@ -342,7 +340,11 @@ async def _run_event_generator(
             yield sse({
                 "type": "done",
                 "status": current_status.value,
-                "error": error_row.error if error_row and current_status == AgentRunStatus.FAILED else None,
+                "error": (
+                    error_row.error
+                    if error_row and current_status == AgentRunStatus.FAILED
+                    else None
+                ),
             })
             return
 
@@ -368,24 +370,28 @@ async def _run_event_generator(
                     # Replay any steps we haven't emitted yet.
                     async with SessionLocal() as db:
                         late_rows = (await db.execute(
-                            select(AgentRunStep)
-                            .where(AgentRunStep.run_id == run_id)
-                            .order_by(AgentRunStep.completed_at.nulls_last())
+                            _steps_stmt(run_id)
                         )).scalars().all()
                     err: str | None = None
                     for r in late_rows:
                         if r.agent_name == "_error":
                             err = r.error
                             continue
-                        key = (r.agent_name, r.completed_at.isoformat() if r.completed_at else None)
-                        if key not in seen:
+                        event_id = str(r.id)
+                        if event_id not in seen:
+                            seen.add(event_id)
                             yield sse({
                                 "type": "step",
+                                "id": event_id,
                                 "agent_name": r.agent_name,
                                 "output": r.output,
                                 "error": r.error,
-                                "completed_at": r.completed_at.isoformat() if r.completed_at else None,
-                            })
+                                "completed_at": (
+                                    r.completed_at.isoformat()
+                                    if r.completed_at
+                                    else None
+                                ),
+                            }, event_id)
                     yield sse({
                         "type": "done",
                         "status": check.status.value,
@@ -398,15 +404,14 @@ async def _run_event_generator(
 
             # Deduplicate steps already replayed from DB.
             if payload.get("type") == "step":
-                key = (
-                    payload.get("agent_name", ""),
-                    payload.get("completed_at"),
-                )
-                if key in seen:
+                event_id = payload.get("id")
+                if not isinstance(event_id, str):
                     continue
-                seen.add(key)
+                if event_id in seen:
+                    continue
+                seen.add(event_id)
 
-            yield sse(payload)
+            yield sse(payload, payload.get("id") if payload.get("type") == "step" else None)
             if payload.get("type") == "done":
                 return
 
@@ -462,6 +467,26 @@ async def _load_owned_run(db, run_id: UUID, user_id: UUID) -> AgentRun:
             status_code=status.HTTP_404_NOT_FOUND, detail="run not found"
         )
     return run
+
+
+def _steps_stmt(run_id: UUID):
+    return (
+        select(AgentRunStep)
+        .where(AgentRunStep.run_id == run_id)
+        .order_by(AgentRunStep.completed_at.nulls_last(), AgentRunStep.id)
+    )
+
+
+def _steps_after_last_event_id(
+    rows: list[AgentRunStep], last_event_id: str | None
+) -> list[AgentRunStep]:
+    """Return rows after the cursor step id, replaying all rows for bad cursors."""
+    if not last_event_id:
+        return rows
+    for idx, row in enumerate(rows):
+        if str(row.id) == last_event_id:
+            return rows[idx + 1 :]
+    return rows
 
 
 class _BulkDeleteRunsBody(BaseModel):

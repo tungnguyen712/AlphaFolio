@@ -89,10 +89,14 @@ export async function* streamRun(
   runId: string,
   getToken: () => Promise<string | null>,
   signal?: AbortSignal,
+  lastEventId?: string | null,
 ): AsyncGenerator<RunSseEvent> {
   const token = await getToken();
   const res = await fetch(`${BASE}/runs/${runId}/stream`, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(lastEventId ? { "Last-Event-ID": lastEventId } : {}),
+    },
     signal,
   });
 
@@ -113,10 +117,15 @@ export async function* streamRun(
       const parts = buf.split("\n\n");
       buf = parts.pop() ?? "";
       for (const chunk of parts) {
-        const dataLine = chunk.split("\n").find((l) => l.startsWith("data: "));
+        const lines = chunk.split("\n");
+        const idLine = lines.find((l) => l.startsWith("id: "));
+        const dataLine = lines.find((l) => l.startsWith("data: "));
         if (!dataLine) continue;
         try {
           const event = JSON.parse(dataLine.slice(6)) as RunSseEvent;
+          if (idLine && event.type === "step") {
+            event.id = event.id || idLine.slice(4);
+          }
           yield event;
           if (event.type === "done") return;
         } catch {

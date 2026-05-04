@@ -197,6 +197,7 @@ export type RunSseEvent =
   | { type: "status"; status: string }
   | {
       type: "step";
+      id: string;
       agent_name: string;
       output: Record<string, unknown> | null;
       error: string | null;

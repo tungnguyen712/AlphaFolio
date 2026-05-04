@@ -47,6 +47,22 @@ def _parse_sse(text: str) -> list[dict]:
     ]
 
 
+def _parse_sse_blocks(text: str) -> list[tuple[str | None, dict]]:
+    """Parse SSE stream text into `(event_id, decoded_payload)` tuples."""
+    events: list[tuple[str | None, dict]] = []
+    for block in text.strip().split("\n\n"):
+        event_id: str | None = None
+        payload: dict | None = None
+        for line in block.splitlines():
+            if line.startswith("id: "):
+                event_id = line[4:]
+            elif line.startswith("data: "):
+                payload = json.loads(line[6:])
+        if payload is not None:
+            events.append((event_id, payload))
+    return events
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -310,9 +326,62 @@ async def test_stream_complete_run_replays_steps_and_done(
     done_events = [e for e in events if e["type"] == "done"]
 
     assert {e["agent_name"] for e in step_events} == {"signal_analysis", "synthesis"}
+    assert all(e.get("id") for e in step_events)
     assert len(done_events) == 1
     assert done_events[0]["status"] == "complete"
     assert done_events[0].get("error") is None
+
+    blocks = _parse_sse_blocks(resp.text)
+    step_blocks = [(event_id, event) for event_id, event in blocks if event["type"] == "step"]
+    assert all(event_id == event["id"] for event_id, event in step_blocks)
+
+
+async def test_stream_complete_run_resumes_after_last_event_id(
+    client: AsyncClient, test_user: User
+):
+    """Reconnects should replay only DB steps after the Last-Event-ID cursor."""
+    async with SessionLocal() as session:
+        run = AgentRun(
+            user_id=test_user.id,
+            flow=AgentRunFlow.RESEARCH,
+            ticker="NVDA",
+            status=AgentRunStatus.COMPLETE,
+            started_at=datetime.now(UTC),
+            completed_at=datetime.now(UTC),
+        )
+        session.add(run)
+        await session.commit()
+        await session.refresh(run)
+
+        first = AgentRunStep(
+            run_id=run.id,
+            agent_name="signal_analysis",
+            output={"signal": "buy"},
+            completed_at=datetime.now(UTC),
+        )
+        second = AgentRunStep(
+            run_id=run.id,
+            agent_name="synthesis",
+            output={"ticker": "NVDA"},
+            completed_at=datetime.now(UTC),
+        )
+        session.add_all([first, second])
+        await session.commit()
+        run_id = run.id
+        first_id = str(first.id)
+        second_id = str(second.id)
+
+    resp = await client.get(f"/runs/{run_id}/stream", headers={"Last-Event-ID": first_id})
+    assert resp.status_code == 200
+
+    events = _parse_sse(resp.text)
+    step_events = [e for e in events if e["type"] == "step"]
+    done_events = [e for e in events if e["type"] == "done"]
+
+    assert [e["id"] for e in step_events] == [second_id]
+    assert step_events[0]["agent_name"] == "synthesis"
+    assert len(done_events) == 1
+    assert done_events[0]["status"] == "complete"
 
 
 async def test_stream_failed_run_includes_error_in_done(

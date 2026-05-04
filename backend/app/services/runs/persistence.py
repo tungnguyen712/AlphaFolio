@@ -449,7 +449,7 @@ async def _stream_and_persist(
         # per tick, but can be multiple when parallel branches finish in the
         # same loop iteration. Persist each one independently.
         step_completed_at = datetime.now(UTC)
-        pending_events: list[dict[str, Any]] = []
+        pending_steps: list[tuple[AgentRunStep, str, dict[str, Any]]] = []
         for node_name, node_update in update.items():
             if not isinstance(node_update, dict):
                 continue
@@ -465,18 +465,24 @@ async def _stream_and_persist(
                 completed_at=step_completed_at,
             )
             session.add(step)
-            pending_events.append({
-                "type": "step",
-                "agent_name": node_name,
-                "output": jsonable_output,
-                "error": None,
-                "completed_at": step_completed_at.isoformat(),
-            })
+            pending_steps.append((step, node_name, jsonable_output))
             logger.info(
                 "agent_run_step_completed",
                 run_id=str(run_id),
                 agent_name=node_name,
             )
+        await session.flush()
+        pending_events = [
+            {
+                "type": "step",
+                "id": str(step.id),
+                "agent_name": node_name,
+                "output": jsonable_output,
+                "error": None,
+                "completed_at": step_completed_at.isoformat(),
+            }
+            for step, node_name, jsonable_output in pending_steps
+        ]
         await session.commit()
         for event in pending_events:
             asyncio.create_task(publish_run_event(run_id, event))
