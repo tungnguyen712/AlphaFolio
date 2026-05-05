@@ -60,6 +60,22 @@ def _headers() -> dict[str, str]:
 # --------------------------------------------------------------------------
 
 
+def _company_tickers_key() -> str:
+    return make_cache_key("sec.company_tickers.v1")
+
+
+@cached_fetch(
+    key_fn=lambda: _company_tickers_key(),
+    ttl_seconds=_CIK_TTL,
+    rate_limiter=_rate_limiter,
+)
+async def _fetch_company_tickers_table() -> dict[str, Any]:
+    async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as client:
+        resp = await client.get(_COMPANY_TICKERS_URL)
+        resp.raise_for_status()
+        return resp.json()
+
+
 def _cik_key(ticker: str) -> str:
     return make_cache_key("sec.cik", ticker=ticker.upper())
 
@@ -71,10 +87,7 @@ async def _resolve_cik(ticker: str) -> dict[str, Any]:
     Raises LookupError if the ticker isn't in SEC's master list (OTC / foreign
     issuers often won't be).
     """
-    async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as client:
-        resp = await client.get(_COMPANY_TICKERS_URL)
-        resp.raise_for_status()
-        table = resp.json()
+    table = await _fetch_company_tickers_table()
 
     upper = ticker.upper()
     for row in table.values():
@@ -133,10 +146,7 @@ async def resolve_ticker_from_name(name: str) -> dict[str, Any]:
         raise LookupError("Empty company name")
     query_upper = query.upper()
 
-    async with httpx.AsyncClient(timeout=20.0, headers=_headers()) as client:
-        resp = await client.get(_COMPANY_TICKERS_URL)
-        resp.raise_for_status()
-        table = resp.json()
+    table = await _fetch_company_tickers_table()
 
     rows = list(table.values())
 

@@ -9,8 +9,6 @@ import logging
 import re
 from datetime import UTC, datetime
 
-logger = logging.getLogger(__name__)
-
 from app.models.agents.supply_chain import (
     ConfidenceLevel,
     RelatedCompany,
@@ -22,12 +20,12 @@ from app.services.data_providers._cache import (
     cache_set,
     make_cache_key,
 )
+from app.services.data_providers.gleif import fetch_gleif_relationships
 from app.services.data_providers.sec_edgar import (
     _resolve_cik,
     fetch_10k_item1_business,
     resolve_ticker_from_name,
 )
-from app.services.data_providers.gleif import fetch_gleif_relationships
 from app.services.data_providers.sec_efts import fetch_efts_customers
 from app.services.data_providers.tavily_supply_chain import fetch_supply_chain_data
 from app.services.data_providers.wikidata import fetch_wikidata_relationships
@@ -37,6 +35,8 @@ from app.services.supply_chain.haiku_extraction import (
     extract_supply_chain_from_tavily,
     extract_supply_chain_from_wikipedia,
 )
+
+logger = logging.getLogger(__name__)
 
 _HAIKU_CACHE_TTL = 7 * 24 * 60 * 60   # 7 days — matches 10-K document TTL
 _TAVILY_HAIKU_TTL = 24 * 60 * 60      # 24 hours — matches Tavily fetch TTL
@@ -340,6 +340,9 @@ async def run_supply_chain(ticker: str) -> SupplyChainReport:
         cik_data = await _resolve_cik(upper)
         company_name = cik_data.get("title", upper)
     except LookupError:
+        company_name = upper
+    except Exception as exc:
+        logger.warning("SEC CIK resolution failed for %s: %s", upper, exc, exc_info=True)
         company_name = upper
 
     (
