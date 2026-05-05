@@ -21,7 +21,7 @@ const GROUP_CONFIG: { kind: RelationshipKind; title: string; empty: string }[] =
 function groupBy(rels: RelatedCompany[]): Record<RelationshipKind, RelatedCompany[]> {
   const result = {} as Record<RelationshipKind, RelatedCompany[]>;
   for (const { kind } of GROUP_CONFIG) result[kind] = [];
-  for (const rel of rels) {
+  for (const rel of rels ?? []) {
     if (result[rel.relationship]) result[rel.relationship].push(rel);
   }
   return result;
@@ -105,7 +105,9 @@ export default function SupplyChainTicker() {
 
   if (!data) return null;
 
-  const grouped = groupBy(data.relationships);
+  const relationships = data.relationships ?? [];
+  const dataSources = data.data_sources_used ?? [];
+  const grouped = groupBy(relationships);
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
@@ -121,7 +123,7 @@ export default function SupplyChainTicker() {
             </span>
           </div>
           <div className="mt-1 flex items-center gap-3 text-xs text-zinc-400 dark:text-zinc-500">
-            <span>{data.relationships.length} relationships found</span>
+            <span>{relationships.length} relationships found</span>
             {data.filed_at && <span>10-K filed {data.filed_at}</span>}
             {data.filing_url && (
               <a
@@ -136,7 +138,7 @@ export default function SupplyChainTicker() {
           </div>
         </div>
         <div className="flex flex-wrap gap-1">
-          {data.data_sources_used.map((s) => (
+          {dataSources.map((s) => (
             <span
               key={s}
               className="rounded-full border border-zinc-200 bg-zinc-50 px-2 py-0.5 text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"

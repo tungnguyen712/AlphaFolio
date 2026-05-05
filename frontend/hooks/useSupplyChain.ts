@@ -3,7 +3,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import { ApiError } from "@/lib/api";
-import type { SupplyChainReport } from "@/lib/types";
+import type { RelatedCompany, SupplyChainReport } from "@/lib/types";
+
+function normalizeSupplyChainReport(report: SupplyChainReport): SupplyChainReport {
+  return {
+    ...report,
+    relationships: Array.isArray(report.relationships)
+      ? report.relationships.filter((rel): rel is RelatedCompany => !!rel)
+      : [],
+    data_sources_used: Array.isArray(report.data_sources_used)
+      ? report.data_sources_used
+      : [],
+    filing_url: report.filing_url ?? null,
+    filed_at: report.filed_at ?? null,
+    notes: report.notes ?? null,
+  };
+}
 
 export function useSupplyChain(ticker: string | null) {
   const api = useApi();
@@ -21,7 +36,7 @@ export function useSupplyChain(ticker: string | null) {
       const result = await api.get<SupplyChainReport>(
         `/supply-chain/${ticker.toUpperCase()}`,
       );
-      setData(result);
+      setData(normalizeSupplyChainReport(result));
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
         setNotFound(true);

@@ -124,13 +124,16 @@ function buildGraph(report: SupplyChainReport): { nodes: Node[]; edges: Edge[] }
 
   // Bucket — skip parent & subsidiary entirely
   const grouped: Record<string, typeof report.relationships> = {
-    supplier: [], customer: [], manufacturer: [],
+    supplier: [],
+    customer: [],
+    manufacturer: [],
+    competitor: [],
   };
-  for (const rel of report.relationships) {
+  for (const rel of report.relationships ?? []) {
     if (grouped[rel.relationship]) grouped[rel.relationship].push(rel);
   }
 
-  const activeKinds = SHOWN_KINDS.filter((k) => grouped[k].length > 0);
+  const activeKinds = SHOWN_KINDS.filter((k) => (grouped[k]?.length ?? 0) > 0);
 
   activeKinds.forEach((kind) => {
     const rels = grouped[kind];
