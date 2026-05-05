@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import delete, select
@@ -87,6 +87,15 @@ async def portfolio_id(user_id):
         await session.refresh(pf)
         yield pf.id
     # User fixture teardown cascades to portfolio.
+
+
+@pytest.fixture(autouse=True)
+def disable_research_output_cache():
+    with (
+        patch("app.services.runs.persistence.cache_get", AsyncMock(return_value=None)),
+        patch("app.services.runs.persistence.cache_set", AsyncMock()),
+    ):
+        yield
 
 
 # ---------------------------------------------------------------------------
@@ -320,6 +329,70 @@ async def test_execute_research_run_refuses_completed_run(user_id):
 
     assert len(steps) == 5
     assert len(reports) == 1
+
+
+async def test_execute_research_run_uses_public_output_cache(user_id):
+    fake = _FakeGraph([])
+    cached = {"synthesis": _synthesis_output("NVDA").model_dump(mode="json")}
+    run_id = await enqueue_research_run(user_id=user_id, ticker="NVDA")
+
+    with (
+        patch("app.services.runs.persistence._research_graph", fake),
+        patch("app.services.runs.persistence.cache_get", AsyncMock(return_value=cached)),
+        patch("app.services.runs.persistence.cache_set", AsyncMock()) as cache_set,
+        patch(
+            "app.services.runs.persistence.extract_triggers",
+            AsyncMock(return_value=[]),
+        ),
+    ):
+        synth = await execute_research_run(run_id)
+
+    assert synth.ticker == "NVDA"
+    assert fake.calls == 0
+    cache_set.assert_not_called()
+
+    async with SessionLocal() as session:
+        run = (await session.execute(select(AgentRun).where(AgentRun.id == run_id))).scalar_one()
+        assert run.status == AgentRunStatus.COMPLETE
+        assert run.graph_state is not None
+        assert run.graph_state["synthesis"]["ticker"] == "NVDA"
+
+        steps = (
+            await session.execute(select(AgentRunStep).where(AgentRunStep.run_id == run_id))
+        ).scalars().all()
+        assert [s.agent_name for s in steps] == ["cache_hit"]
+        assert steps[0].output and steps[0].output["cache_hit"] is True
+
+        report = (
+            await session.execute(select(ResearchReport).where(ResearchReport.run_id == run_id))
+        ).scalar_one()
+        assert report.ticker == "NVDA"
+
+
+async def test_execute_research_run_does_not_cache_portfolio_scoped_research(
+    user_id, portfolio_id
+):
+    fake = _FakeGraph(_research_updates("NVDA"))
+    run_id = await enqueue_research_run(
+        user_id=user_id,
+        ticker="NVDA",
+        portfolio_id=portfolio_id,
+    )
+
+    with (
+        patch("app.services.runs.persistence._research_graph", fake),
+        patch("app.services.runs.persistence.cache_get", AsyncMock()) as cache_get,
+        patch("app.services.runs.persistence.cache_set", AsyncMock()) as cache_set,
+        patch(
+            "app.services.runs.persistence.extract_triggers",
+            AsyncMock(return_value=[]),
+        ),
+    ):
+        await execute_research_run(run_id)
+
+    assert fake.calls == 1
+    cache_get.assert_not_called()
+    cache_set.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

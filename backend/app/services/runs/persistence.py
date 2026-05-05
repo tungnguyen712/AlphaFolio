@@ -59,6 +59,7 @@ from app.models.db import (
     ResearchSignal,
     RiskProfile,
 )
+from app.services.data_providers._cache import cache_get, cache_set, make_cache_key
 from app.services.llm.anthropic_client import (
     LLMCallRecord,
     drain_llm_call_records,
@@ -74,6 +75,7 @@ from app.services.redis_client import publish_run_event
 _research_graph = build_research_graph()
 _portfolio_graph = build_portfolio_graph()
 logger = structlog.get_logger(__name__)
+_RESEARCH_OUTPUT_CACHE_TTL_SECONDS = 30 * 60
 
 
 # ===========================================================================
@@ -164,6 +166,42 @@ async def execute_research_run(run_id: UUID) -> SynthesisOutput:
 
             as_of_raw = queued_inputs.get("as_of_date")
             as_of = date.fromisoformat(as_of_raw) if as_of_raw else None
+            cache_key = _research_output_cache_key(queued_inputs, as_of)
+            if cache_key is not None:
+                cached = await cache_get(cache_key)
+                if cached is not None:
+                    try:
+                        synth = SynthesisOutput.model_validate(cached["synthesis"])
+                    except Exception as exc:
+                        logger.warning(
+                            "research_output_cache_invalid",
+                            run_id=str(run_id),
+                            cache_key=cache_key,
+                            error=str(exc),
+                        )
+                    else:
+                        await _persist_cache_hit_step(session, run_id, cache_key)
+                        await _finalize_run(session, run, {"synthesis": synth})
+                        await _persist_research_report(
+                            session=session,
+                            run=run,
+                            run_id=run_id,
+                            synth=synth,
+                            queued_inputs=queued_inputs,
+                            as_of=as_of,
+                        )
+                        logger.info(
+                            "research_output_cache_hit",
+                            run_id=str(run_id),
+                            cache_key=cache_key,
+                            ticker=synth.ticker,
+                        )
+                        asyncio.create_task(
+                            publish_run_event(
+                                run_id, {"type": "done", "status": "complete"}
+                            )
+                        )
+                        return synth
 
             initial = new_research_state(
                 ticker=ticker_str,
@@ -232,6 +270,20 @@ async def execute_research_run(run_id: UUID) -> SynthesisOutput:
                 )
                 session.add(pending)
                 await session.commit()
+
+            if cache_key is not None:
+                await cache_set(
+                    cache_key,
+                    {"synthesis": synth.model_dump(mode="json")},
+                    _RESEARCH_OUTPUT_CACHE_TTL_SECONDS,
+                )
+                logger.info(
+                    "research_output_cache_stored",
+                    run_id=str(run_id),
+                    cache_key=cache_key,
+                    ticker=synth.ticker,
+                    ttl_seconds=_RESEARCH_OUTPUT_CACHE_TTL_SECONDS,
+                )
 
             asyncio.create_task(
                 publish_run_event(run_id, {"type": "done", "status": "complete"})
@@ -402,6 +454,110 @@ async def run_portfolio(
 # ===========================================================================
 # Internals
 # ===========================================================================
+
+
+def _research_output_cache_key(
+    queued_inputs: dict[str, Any],
+    as_of: date | None,
+) -> str | None:
+    """Cache only user-independent public research outputs."""
+    if queued_inputs.get("mode", "public") != "public":
+        return None
+    if queued_inputs.get("portfolio_id") is not None:
+        return None
+    ticker = queued_inputs.get("ticker")
+    if not isinstance(ticker, str) or not ticker.strip():
+        return None
+    return make_cache_key(
+        "research.output.v1",
+        ticker=ticker.upper(),
+        mode="public",
+        lookback_days=queued_inputs.get("lookback_days", 90),
+        as_of_date=as_of.isoformat() if as_of else None,
+    )
+
+
+async def _persist_cache_hit_step(
+    session: AsyncSession,
+    run_id: UUID,
+    cache_key: str,
+) -> None:
+    step = AgentRunStep(
+        run_id=run_id,
+        agent_name="cache_hit",
+        input=None,
+        output={"cache_hit": True, "cache_key": cache_key},
+        error=None,
+        completed_at=datetime.now(UTC),
+    )
+    session.add(step)
+    await session.flush()
+    event = _step_event(step, "cache_hit", step.output or {})
+    await session.commit()
+    asyncio.create_task(publish_run_event(run_id, event))
+
+
+async def _persist_research_report(
+    *,
+    session: AsyncSession,
+    run: AgentRun,
+    run_id: UUID,
+    synth: SynthesisOutput,
+    queued_inputs: dict[str, Any],
+    as_of: date | None,
+) -> None:
+    portfolio_id_raw = queued_inputs.get("portfolio_id")
+    report = ResearchReport(
+        user_id=run.user_id,
+        portfolio_id=UUID(portfolio_id_raw) if portfolio_id_raw else None,
+        run_id=run_id,
+        ticker=synth.ticker,
+        signal=synth.signal,
+        confidence=synth.layers.confidence,
+        report_json=synth.model_dump(mode="json"),
+        as_of_date=as_of,
+    )
+    report_id = report.id
+    session.add(report)
+    await session.commit()
+    logger.info(
+        "research_report_persisted",
+        run_id=str(run_id),
+        report_id=str(report_id),
+        ticker=synth.ticker,
+        signal=synth.signal.value,
+    )
+
+    try:
+        triggers = await extract_triggers(
+            synth,
+            user_id=run.user_id,
+            report_id=report_id,
+            ticker=synth.ticker,
+            as_of_date=as_of,
+        )
+        if triggers:
+            session.add_all(triggers)
+            await session.commit()
+    except Exception as _exc:
+        logger.warning(
+            "research_trigger_extraction_failed",
+            run_id=str(run_id),
+            ticker=synth.ticker,
+            error=str(_exc),
+            exc_info=True,
+        )
+
+    if synth.signal == ResearchSignal.BUY and portfolio_id_raw:
+        pending = PortfolioPositionPending(
+            portfolio_id=UUID(portfolio_id_raw),
+            ticker=synth.ticker,
+            target_pct=Decimal(str(synth.recommended_position_pct or 0)),
+            source_report_id=report_id,
+            status=PendingPositionStatus.PENDING,
+        )
+        session.add(pending)
+        await session.commit()
 
 
 async def _claim_queued_run(session: AsyncSession, run_id: UUID) -> AgentRun:
