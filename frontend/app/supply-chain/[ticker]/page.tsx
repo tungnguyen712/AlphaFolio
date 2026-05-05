@@ -110,7 +110,7 @@ export default function SupplyChainTicker() {
   const grouped = groupBy(relationships);
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
+    <main className="mx-auto max-w-7xl px-6 py-10">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>

@@ -77,8 +77,8 @@ const VGAP = 12;         // vertical gap between nodes in grid
 const GROUP_PAD = 24;    // padding inside dotted boundary
 const GROUP_LABEL_H = 18; // space reserved for the floating label
 const MAX_COLS = 4;
-// Minimum distance from center (0,0) to the nearest edge of any group
-const MIN_CENTER_DIST = 160;
+// Minimum distance from center (0,0) to the nearest edge of any group.
+const MIN_CENTER_DIST = 88;
 
 // Fixed angles: suppliers top, customers right, manufacturers left
 const SECTOR_ANGLES: Record<string, number> = {
@@ -121,6 +121,7 @@ function buildGraph(report: SupplyChainReport): { nodes: Node[]; edges: Edge[] }
     position: { x: 0, y: 0 },
     data: { label: report.company_name },
     style: CENTER_STYLE,
+    draggable: false,
   });
 
   // Bucket — skip parent & subsidiary entirely
@@ -145,8 +146,9 @@ function buildGraph(report: SupplyChainReport): { nodes: Node[]; edges: Edge[] }
     const ux = Math.cos(angle);
     const uy = Math.sin(angle);
 
-    // Place group so its nearest edge is >= MIN_CENTER_DIST from origin
-    const dist = MIN_CENTER_DIST + Math.sqrt((groupW / 2) ** 2 + (groupH / 2) ** 2);
+    // Place group so its near edge, not its far diagonal corner, drives spacing.
+    const halfAlongRay = Math.abs(ux) * groupW / 2 + Math.abs(uy) * groupH / 2;
+    const dist = MIN_CENTER_DIST + halfAlongRay;
     const groupX = ux * dist - groupW / 2;
     const groupY = uy * dist - groupH / 2;
 
@@ -159,7 +161,7 @@ function buildGraph(report: SupplyChainReport): { nodes: Node[]; edges: Edge[] }
       width: groupW,
       height: groupH,
       style: { width: groupW, height: groupH },
-      draggable: false,
+      draggable: true,
     });
 
     // Grid-layout child nodes inside the group — guaranteed no overlaps
@@ -229,7 +231,7 @@ export function SupplyChainGraph({ report }: Props) {
   return (
     <div
       className="w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800"
-      style={{ height: 600 }}
+      style={{ height: "min(78vh, 860px)", minHeight: 680 }}
     >
       <ReactFlow
         nodes={nodes}
@@ -237,10 +239,9 @@ export function SupplyChainGraph({ report }: Props) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
-        nodesDraggable={false}
         panOnDrag
-        panOnScroll
-        zoomOnScroll={false}
+        panOnScroll={false}
+        zoomOnScroll
         fitView
         fitViewOptions={{ padding: 0.15 }}
         minZoom={0.3}
