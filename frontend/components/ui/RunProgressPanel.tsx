@@ -18,6 +18,34 @@ function StepDot({ status }: { status: "running" | "done" | "failed" | "pending"
   return <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-zinc-300 dark:bg-zinc-600" />;
 }
 
+function StepAccounting({
+  step,
+}: {
+  step: {
+    llm_model: string | null;
+    input_tokens: number | null;
+    output_tokens: number | null;
+    latency_ms: number | null;
+    estimated_cost_usd: number | null;
+  };
+}) {
+  const parts = [
+    step.llm_model,
+    step.latency_ms !== null ? `${(step.latency_ms / 1000).toFixed(1)}s` : null,
+    step.input_tokens !== null || step.output_tokens !== null
+      ? `${step.input_tokens ?? 0} in / ${step.output_tokens ?? 0} out`
+      : null,
+    step.estimated_cost_usd !== null ? `$${step.estimated_cost_usd.toFixed(4)}` : null,
+  ].filter(Boolean);
+
+  if (parts.length === 0) return null;
+  return (
+    <p className="mt-0.5 font-mono text-xs text-zinc-400 dark:text-zinc-500">
+      {parts.join(" · ")}
+    </p>
+  );
+}
+
 export function RunProgressPanel({ runId, onComplete }: RunProgressPanelProps) {
   const { steps, streamStatus, error: streamError, isStreaming } = useRunStream(runId);
   const { data: run } = useRun(runId);
@@ -86,6 +114,7 @@ export function RunProgressPanel({ runId, onComplete }: RunProgressPanelProps) {
                     {new Date(step.completed_at).toLocaleTimeString()}
                   </p>
                 )}
+                <StepAccounting step={step} />
               </div>
               <span className={`shrink-0 text-xs font-mono ${step.error ? "text-red-500" : step.completed_at ? "text-emerald-500" : "text-zinc-400"}`}>
                 {step.error ? "✗" : step.completed_at ? "✓" : "…"}

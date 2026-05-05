@@ -123,6 +123,7 @@ async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
     user_prompt = _build_user_prompt(ticker, news_items, analyst_changes, macro)
     narrative = await call_structured(
         tier=AgentTier.SONNET,
+        agent_name="market_intel",
         system=SYSTEM_PROMPT,
         user=user_prompt,
         output_model=_NarrativeOnly,

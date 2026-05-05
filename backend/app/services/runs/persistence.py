@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import asyncio
 import traceback
+from collections.abc import Iterable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -58,8 +59,14 @@ from app.models.db import (
     ResearchSignal,
     RiskProfile,
 )
-from app.services.redis_client import publish_run_event
+from app.services.llm.anthropic_client import (
+    LLMCallRecord,
+    drain_llm_call_records,
+    reset_llm_accounting,
+    start_llm_accounting,
+)
 from app.services.pipeline.condition_extractor import extract_triggers
+from app.services.redis_client import publish_run_event
 
 # Compile graphs once at import time. The compiled objects are stateless —
 # state lives per-invocation — so sharing them across calls is safe and cheaper
@@ -443,6 +450,7 @@ async def _stream_and_persist(
     """Stream `updates` from the graph, persist one step per node completion,
     and return the reconstructed final state."""
     accumulated: dict[str, Any] = dict(initial_state)
+    accounting_token = start_llm_accounting()
 
     async for update in graph.astream(initial_state, stream_mode="updates"):
         # `updates` yields {node_name: partial_state_update} — usually one key
@@ -455,12 +463,19 @@ async def _stream_and_persist(
                 continue
             accumulated.update(node_update)
             jsonable_output = _to_jsonable(node_update)
+            accounting = _aggregate_llm_records(drain_llm_call_records(node_name))
 
             step = AgentRunStep(
                 run_id=run_id,
                 agent_name=node_name,
                 input=None,
                 output=jsonable_output,
+                error=None,
+                llm_model=accounting["llm_model"],
+                input_tokens=accounting["input_tokens"],
+                output_tokens=accounting["output_tokens"],
+                latency_ms=accounting["latency_ms"],
+                estimated_cost_usd=accounting["estimated_cost_usd"],
                 started_at=None,
                 completed_at=step_completed_at,
             )
@@ -470,24 +485,75 @@ async def _stream_and_persist(
                 "agent_run_step_completed",
                 run_id=str(run_id),
                 agent_name=node_name,
+                llm_model=step.llm_model,
+                input_tokens=step.input_tokens,
+                output_tokens=step.output_tokens,
+                latency_ms=step.latency_ms,
+                estimated_cost_usd=step.estimated_cost_usd,
             )
         await session.flush()
         pending_events = [
-            {
-                "type": "step",
-                "id": str(step.id),
-                "agent_name": node_name,
-                "output": jsonable_output,
-                "error": None,
-                "completed_at": step_completed_at.isoformat(),
-            }
+            _step_event(step, node_name, jsonable_output)
             for step, node_name, jsonable_output in pending_steps
         ]
         await session.commit()
         for event in pending_events:
             asyncio.create_task(publish_run_event(run_id, event))
 
+    reset_llm_accounting(accounting_token)
     return accumulated
+
+
+def _aggregate_llm_records(records: list[LLMCallRecord]) -> dict[str, Any]:
+    if not records:
+        return {
+            "llm_model": None,
+            "input_tokens": None,
+            "output_tokens": None,
+            "latency_ms": None,
+            "estimated_cost_usd": None,
+        }
+    models = {record.model for record in records}
+    input_tokens = _sum_optional_int(record.input_tokens for record in records)
+    output_tokens = _sum_optional_int(record.output_tokens for record in records)
+    estimated_cost = _sum_optional_float(record.estimated_cost_usd for record in records)
+    return {
+        "llm_model": next(iter(models)) if len(models) == 1 else "multiple",
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "latency_ms": round(sum(record.latency_ms for record in records), 2),
+        "estimated_cost_usd": (
+            round(estimated_cost, 6) if estimated_cost is not None else None
+        ),
+    }
+
+
+def _sum_optional_int(values: Iterable[int | None]) -> int | None:
+    present = [value for value in values if value is not None]
+    return sum(present) if present else None
+
+
+def _sum_optional_float(values: Iterable[float | None]) -> float | None:
+    present = [value for value in values if value is not None]
+    return sum(present) if present else None
+
+
+def _step_event(
+    step: AgentRunStep, node_name: str, jsonable_output: dict[str, Any]
+) -> dict[str, Any]:
+    return {
+        "type": "step",
+        "id": str(step.id),
+        "agent_name": node_name,
+        "output": jsonable_output,
+        "error": step.error,
+        "llm_model": step.llm_model,
+        "input_tokens": step.input_tokens,
+        "output_tokens": step.output_tokens,
+        "latency_ms": step.latency_ms,
+        "estimated_cost_usd": step.estimated_cost_usd,
+        "completed_at": step.completed_at.isoformat() if step.completed_at else None,
+    }
 
 
 async def _finalize_run(

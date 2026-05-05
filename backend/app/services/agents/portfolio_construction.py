@@ -54,6 +54,7 @@ async def run(inputs: PortfolioConstructionInput) -> PortfolioConstructionOutput
     user_prompt = _build_user_prompt(inputs)
     return await call_structured(
         tier=AgentTier.SONNET,
+        agent_name="portfolio_construction",
         system=SYSTEM_PROMPT,
         user=user_prompt,
         output_model=PortfolioConstructionOutput,

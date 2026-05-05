@@ -176,6 +176,11 @@ export interface RunStepOut {
   agent_name: string;
   output: Record<string, unknown> | null;
   error: string | null;
+  llm_model: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  latency_ms: number | null;
+  estimated_cost_usd: number | null;
   completed_at: string | null;
 }
 
@@ -201,6 +206,11 @@ export type RunSseEvent =
       agent_name: string;
       output: Record<string, unknown> | null;
       error: string | null;
+      llm_model: string | null;
+      input_tokens: number | null;
+      output_tokens: number | null;
+      latency_ms: number | null;
+      estimated_cost_usd: number | null;
       completed_at: string | null;
     }
   | { type: "done"; status: "complete" | "failed" | "timeout"; error: string | null };

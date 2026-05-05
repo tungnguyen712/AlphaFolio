@@ -58,6 +58,11 @@ class RunStepOut(_APISchema):
     agent_name: str
     output: dict[str, Any] | None = None
     error: str | None = None
+    llm_model: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    latency_ms: float | None = None
+    estimated_cost_usd: float | None = None
     completed_at: datetime | None = None
 
 
@@ -95,4 +100,9 @@ class RunEventOut(BaseModel):
     agent_name: str | None = None
     output: dict[str, Any] | None = None
     error: str | None = None
+    llm_model: str | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    latency_ms: float | None = None
+    estimated_cost_usd: float | None = None
     completed_at: str | None = None

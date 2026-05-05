@@ -19,6 +19,9 @@ If we ever swap Anthropic, this file is the one edit.
 """
 from __future__ import annotations
 
+import time
+from contextvars import ContextVar, Token
+from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, TypeVar
 
@@ -39,6 +42,15 @@ T = TypeVar("T", bound=BaseModel)
 
 # Name is arbitrary but kept stable so prompt-cache keys stay warm.
 _TOOL_NAME = "record_output"
+_MILLION = 1_000_000
+_PRICING_USD_PER_MILLION: dict[str, tuple[float, float]] = {
+    "opus": (15.0, 75.0),
+    "sonnet": (3.0, 15.0),
+    "haiku": (1.0, 5.0),
+}
+_llm_call_records: ContextVar[list["LLMCallRecord"] | None] = ContextVar(
+    "llm_call_records", default=None
+)
 
 
 class AgentTier(StrEnum):
@@ -63,6 +75,34 @@ class StructuredOutputError(RuntimeError):
     tool arguments fail Pydantic validation. Both mean a prompt/schema bug."""
 
 
+@dataclass(slots=True)
+class LLMCallRecord:
+    agent_name: str
+    model: str
+    input_tokens: int | None
+    output_tokens: int | None
+    latency_ms: float
+    estimated_cost_usd: float | None
+
+
+def start_llm_accounting() -> Token[list[LLMCallRecord] | None]:
+    """Start collecting LLM usage records in the current async context."""
+    return _llm_call_records.set([])
+
+
+def reset_llm_accounting(token: Token[list[LLMCallRecord] | None]) -> None:
+    _llm_call_records.reset(token)
+
+
+def drain_llm_call_records(agent_name: str) -> list[LLMCallRecord]:
+    records = _llm_call_records.get()
+    if records is None:
+        return []
+    matched = [record for record in records if record.agent_name == agent_name]
+    records[:] = [record for record in records if record.agent_name != agent_name]
+    return matched
+
+
 _client: AsyncAnthropic | None = None
 
 
@@ -84,6 +124,7 @@ def get_client() -> AsyncAnthropic:
 async def call_structured(
     *,
     tier: AgentTier,
+    agent_name: str | None = None,
     system: str,
     user: str,
     output_model: type[T],
@@ -106,8 +147,10 @@ async def call_structured(
     if temperature is not None:
         extra["temperature"] = temperature
 
+    model = model_for(tier)
+    started = time.perf_counter()
     response: Message = await client.messages.create(
-        model=model_for(tier),
+        model=model,
         max_tokens=max_tokens,
         system=[
             {
@@ -121,6 +164,13 @@ async def call_structured(
         messages=[{"role": "user", "content": user}],
         **extra,
     )
+    if agent_name is not None:
+        _record_llm_call(
+            agent_name=agent_name,
+            model=model,
+            response=response,
+            latency_ms=round((time.perf_counter() - started) * 1000, 2),
+        )
 
     payload = _extract_tool_input(response)
     payload = _unwrap_if_wrapped(payload, output_model)
@@ -212,3 +262,52 @@ def _extract_tool_input(response: Message) -> dict[str, Any]:
         f"Stop reason: {response.stop_reason}. Content blocks: "
         f"{[getattr(b, 'type', type(b).__name__) for b in response.content]}"
     )
+
+
+def _record_llm_call(
+    *,
+    agent_name: str,
+    model: str,
+    response: Message,
+    latency_ms: float,
+) -> None:
+    records = _llm_call_records.get()
+    if records is None:
+        return
+    usage = getattr(response, "usage", None)
+    input_tokens = _int_or_none(getattr(usage, "input_tokens", None))
+    output_tokens = _int_or_none(getattr(usage, "output_tokens", None))
+    records.append(
+        LLMCallRecord(
+            agent_name=agent_name,
+            model=_normalize_model(model),
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            latency_ms=latency_ms,
+            estimated_cost_usd=_estimate_cost_usd(model, input_tokens, output_tokens),
+        )
+    )
+
+
+def _normalize_model(model: str) -> str:
+    return model.strip().lower()
+
+
+def _estimate_cost_usd(
+    model: str, input_tokens: int | None, output_tokens: int | None
+) -> float | None:
+    if input_tokens is None and output_tokens is None:
+        return None
+    normalized = _normalize_model(model)
+    for family, (input_rate, output_rate) in _PRICING_USD_PER_MILLION.items():
+        if family in normalized:
+            cost = (
+                (input_tokens or 0) * input_rate
+                + (output_tokens or 0) * output_rate
+            ) / _MILLION
+            return round(cost, 6)
+    return None
+
+
+def _int_or_none(value: Any) -> int | None:
+    return value if isinstance(value, int) else None

@@ -124,6 +124,7 @@ async def run(inputs: SynthesisInput) -> SynthesisOutput:
     user_prompt = _build_user_prompt(inputs)
     result = await call_structured(
         tier=AgentTier.OPUS,
+        agent_name="synthesis",
         system=SYSTEM_PROMPT,
         user=user_prompt,
         output_model=SynthesisOutput,

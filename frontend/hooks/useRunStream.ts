@@ -58,6 +58,11 @@ export function useRunStream(runId: string | null) {
                     agent_name: event.agent_name,
                     output: event.output,
                     error: event.error,
+                    llm_model: event.llm_model ?? null,
+                    input_tokens: event.input_tokens ?? null,
+                    output_tokens: event.output_tokens ?? null,
+                    latency_ms: event.latency_ms ?? null,
+                    estimated_cost_usd: event.estimated_cost_usd ?? null,
                     completed_at: event.completed_at,
                   },
                 ]);

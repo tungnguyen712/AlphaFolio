@@ -292,6 +292,11 @@ async def _run_event_generator(
                     "agent_name": r.agent_name,
                     "output": r.output,
                     "error": r.error,
+                    "llm_model": r.llm_model,
+                    "input_tokens": r.input_tokens,
+                    "output_tokens": r.output_tokens,
+                    "latency_ms": r.latency_ms,
+                    "estimated_cost_usd": r.estimated_cost_usd,
                     "completed_at": r.completed_at.isoformat() if r.completed_at else None,
                 }, str(r.id))
         yield sse({
@@ -331,6 +336,11 @@ async def _run_event_generator(
                     "agent_name": r.agent_name,
                     "output": r.output,
                     "error": r.error,
+                    "llm_model": r.llm_model,
+                    "input_tokens": r.input_tokens,
+                    "output_tokens": r.output_tokens,
+                    "latency_ms": r.latency_ms,
+                    "estimated_cost_usd": r.estimated_cost_usd,
                     "completed_at": r.completed_at.isoformat() if r.completed_at else None,
                 }, event_id)
 
@@ -386,6 +396,11 @@ async def _run_event_generator(
                                 "agent_name": r.agent_name,
                                 "output": r.output,
                                 "error": r.error,
+                                "llm_model": r.llm_model,
+                                "input_tokens": r.input_tokens,
+                                "output_tokens": r.output_tokens,
+                                "latency_ms": r.latency_ms,
+                                "estimated_cost_usd": r.estimated_cost_usd,
                                 "completed_at": (
                                     r.completed_at.isoformat()
                                     if r.completed_at

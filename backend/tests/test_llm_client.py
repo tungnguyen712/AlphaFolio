@@ -16,7 +16,10 @@ from app.services.llm.anthropic_client import (
     AgentTier,
     StructuredOutputError,
     call_structured,
+    drain_llm_call_records,
     model_for,
+    reset_llm_accounting,
+    start_llm_accounting,
 )
 
 
@@ -25,14 +28,21 @@ class _Dummy(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
 
 
-def _fake_message(payload: dict | None, *, stop_reason: str = "tool_use") -> SimpleNamespace:
+def _fake_message(
+    payload: dict | None,
+    *,
+    stop_reason: str = "tool_use",
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+) -> SimpleNamespace:
     if payload is None:
         content = [SimpleNamespace(type="text", text="I refuse")]
     else:
         content = [
             SimpleNamespace(type="tool_use", name="record_output", input=payload),
         ]
-    return SimpleNamespace(content=content, stop_reason=stop_reason)
+    usage = SimpleNamespace(input_tokens=input_tokens, output_tokens=output_tokens)
+    return SimpleNamespace(content=content, stop_reason=stop_reason, usage=usage)
 
 
 def test_model_for_resolves_each_tier() -> None:
@@ -64,6 +74,39 @@ async def test_call_structured_parses_tool_input() -> None:
     assert call_kwargs["tool_choice"] == {"type": "tool", "name": "record_output"}
     assert call_kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert call_kwargs["tools"][0]["name"] == "record_output"
+
+
+async def test_call_structured_records_usage_when_accounting_enabled() -> None:
+    fake = AsyncMock(
+        return_value=_fake_message(
+            {"verdict": "BUY", "confidence": 0.72},
+            input_tokens=1200,
+            output_tokens=300,
+        )
+    )
+    token = start_llm_accounting()
+    try:
+        with patch(
+            "app.services.llm.anthropic_client.get_client",
+            return_value=SimpleNamespace(messages=SimpleNamespace(create=fake)),
+        ):
+            await call_structured(
+                tier=AgentTier.SONNET,
+                agent_name="signal_analysis",
+                system="sys",
+                user="usr",
+                output_model=_Dummy,
+            )
+
+        records = drain_llm_call_records("signal_analysis")
+    finally:
+        reset_llm_accounting(token)
+
+    assert len(records) == 1
+    assert records[0].model.startswith("claude")
+    assert records[0].input_tokens == 1200
+    assert records[0].output_tokens == 300
+    assert records[0].estimated_cost_usd == 0.0081
 
 
 async def test_call_structured_raises_when_no_tool_use_block() -> None:

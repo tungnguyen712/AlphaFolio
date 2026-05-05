@@ -72,6 +72,7 @@ async def run(inputs: SignalAnalysisInput) -> SignalAnalysisOutput:
     user_prompt = _build_user_prompt(inputs)
     return await call_structured(
         tier=AgentTier.OPUS,
+        agent_name="signal_analysis",
         system=SYSTEM_PROMPT,
         user=user_prompt,
         output_model=SignalAnalysisOutput,

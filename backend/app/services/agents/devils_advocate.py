@@ -32,6 +32,7 @@ async def run(inputs: DevilsAdvocateInput) -> DevilsAdvocateOutput:
     user_prompt = _build_user_prompt(inputs)
     return await call_structured(
         tier=AgentTier.OPUS,
+        agent_name="devils_advocate",
         system=SYSTEM_PROMPT,
         user=user_prompt,
         output_model=DevilsAdvocateOutput,
