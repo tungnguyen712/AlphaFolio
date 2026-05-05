@@ -83,8 +83,9 @@ const MIN_CENTER_DIST = 160;
 // Fixed angles: suppliers top, customers right, manufacturers left
 const SECTOR_ANGLES: Record<string, number> = {
   supplier:     -Math.PI / 2,         // top
-  customer:      Math.PI / 6,         // bottom-right (30°)
-  manufacturer: (5 * Math.PI) / 6,    // bottom-left (150°)
+  customer:      Math.PI / 6,         // bottom-right
+  manufacturer: (5 * Math.PI) / 6,    // bottom-left
+  competitor:    Math.PI / 2,         // bottom
 };
 
 const CENTER_STYLE: React.CSSProperties = {
@@ -140,7 +141,7 @@ function buildGraph(report: SupplyChainReport): { nodes: Node[]; edges: Edge[] }
     const { bg, text, border } = REL_COLOR[kind];
     const { cols, innerW, groupW, groupH } = gridDims(rels.length);
 
-    const angle = SECTOR_ANGLES[kind];
+    const angle = SECTOR_ANGLES[kind] ?? 0;
     const ux = Math.cos(angle);
     const uy = Math.sin(angle);
 
@@ -158,7 +159,7 @@ function buildGraph(report: SupplyChainReport): { nodes: Node[]; edges: Edge[] }
       width: groupW,
       height: groupH,
       style: { width: groupW, height: groupH },
-      draggable: true,
+      draggable: false,
     });
 
     // Grid-layout child nodes inside the group — guaranteed no overlaps
@@ -189,7 +190,7 @@ function buildGraph(report: SupplyChainReport): { nodes: Node[]; edges: Edge[] }
           textAlign: "center",
           fontWeight: 500,
         },
-        draggable: true,
+        draggable: false,
       });
 
       edges.push({
@@ -236,6 +237,10 @@ export function SupplyChainGraph({ report }: Props) {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
+        nodesDraggable={false}
+        panOnDrag
+        panOnScroll
+        zoomOnScroll={false}
         fitView
         fitViewOptions={{ padding: 0.15 }}
         minZoom={0.3}
