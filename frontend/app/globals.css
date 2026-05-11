@@ -4,6 +4,11 @@
 
 html {
   color-scheme: light dark;
+  overflow-x: hidden;
+}
+
+body {
+  overflow-x: hidden;
 }
 
 * {

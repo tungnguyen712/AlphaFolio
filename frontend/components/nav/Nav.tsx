@@ -49,8 +49,8 @@ export function Nav() {
 
   return (
     <nav className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90">
-      <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
-        <div className="flex items-center gap-8">
+      <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center justify-between px-6 py-4">
+        <div className="flex min-w-0 items-center gap-8">
           <Link href="/" className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
             AlphaFolio
           </Link>
