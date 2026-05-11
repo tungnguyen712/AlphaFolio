@@ -23,11 +23,18 @@ Multi-agent AI stock research and portfolio management platform. A LangGraph pip
   - Fallback to equal-weight when < 2 tickers or insufficient price history
 - Chrome-style bulk delete for research runs and reports (checkboxes, "X selected", Select all / Deselect all)
 
+**Portfolio Simulation & Backtesting**
+- Build a hypothetical portfolio (1–10 tickers, custom weights) and replay it over any window from 30 days to 10 years
+- Benchmark comparison (default: VOO) with aligned trading-day intersection across all tickers
+- Metrics computed in pure Python — no LLM: total return, CAGR, Sharpe ratio (252-day annualized), max drawdown
+- Normalized cumulative return chart (multi-line: portfolio + benchmark + individual tickers) via MultiLineReturnChart
+
 **Supply Chain**
-- Descriptive relationship map for any ticker: suppliers, customers, manufacturers
-- 6 parallel data sources: GLEIF (regulatory parent/subsidiary structure), Wikidata, SEC 10-K Item 1, Wikipedia, SEC EDGAR Full-Text Search (EFTS), Tavily
+- Descriptive relationship map for any ticker: suppliers, customers, manufacturers, parents, subsidiaries, competitors
+- 6 parallel async sources: GLEIF (regulatory parent/subsidiary structure), Wikidata SPARQL, SEC 10-K Item 1, Wikipedia, SEC EDGAR Full-Text Search (EFTS), Tavily
+- Haiku extraction layer for 10-K, Wikipedia, and Tavily text (structured entity recognition, deduplication by normalized name)
+- Priority merge: GLEIF > Wikidata > 10-K > Wikipedia > SEC EFTS > Tavily; sources list merged on collision
 - Interactive React Flow graph view with dotted group boundaries per category and draggable nodes; cards view for detail
-- Results cached 24 h in Redis; no LLM call — pure extraction pipeline
 
 ## Agent Pipeline
 
@@ -46,9 +53,9 @@ Data retrieval and market intel run in parallel (LangGraph fan-out). The validat
 
 ## Tech Stack
 
-**Backend** — FastAPI (async) · SQLAlchemy 2.0 · asyncpg · LangGraph 0.2 · Celery + Redis · PostgreSQL 16 + pgvector · Anthropic SDK · Clerk JWT · LangSmith · Alembic · uv
+**Backend**: FastAPI (async) · SQLAlchemy 2.0 · asyncpg · LangGraph 0.2 · Celery + Redis · PostgreSQL 16 + pgvector · Anthropic SDK · Clerk JWT · LangSmith · Alembic · uv
 
-**Frontend** — Next.js 14 (App Router) · React 18 · TypeScript strict · Tailwind CSS · Clerk · @xyflow/react
+**Frontend**: Next.js 14 (App Router) · React 18 · TypeScript strict · Tailwind CSS · Clerk · @xyflow/react
 
 ## Infrastructure
 
