@@ -165,14 +165,17 @@ These are live in production and must be preserved. Do not revert.
 
 A dedicated 3rd flow distinct from Research and Portfolio. **Descriptive, not a recommendation** — the verdict/top-3-signals/key-uncertainty rule does NOT apply here.
 
-**Architecture:** Simple async pipeline (no LangGraph). Three parallel fetches → merge → Haiku extraction → cached GET endpoint.
+**Architecture:** Simple async pipeline (no LangGraph). Six parallel fetches → priority merge → Haiku extraction for text sources → cached GET endpoint.
 
-**Data sources:**
-- Wikidata SPARQL (`app/services/data_providers/wikidata.py`) — subsidiaries (P355), parent org (P749). FREE. 30-day TTL.
+**Data sources (priority order):**
+- GLEIF (`app/services/data_providers/gleif.py`) — regulatory parent/subsidiary structure. FREE. High confidence.
+- Wikidata SPARQL (`app/services/data_providers/wikidata.py`) — subsidiaries (P355), parent org (P749). FREE. High confidence.
 - SEC 10-K Item 1 Business section (`sec_edgar.fetch_10k_item1_business`) — "significant customers", "sole-source suppliers". FREE + ~$0.002 Haiku per extraction. 7-day TTL.
-- Tavily supply chain queries (`app/services/data_providers/tavily_supply_chain.py`) — fetched and cached; entity parsing deferred to v1.1.
+- Wikipedia (`app/services/data_providers/wikipedia.py`) — company article text → Haiku extraction. Medium confidence. 7-day TTL.
+- SEC EDGAR Full-Text Search (`app/services/data_providers/sec_efts.py`) — cross-filer customer mentions. Medium confidence.
+- Tavily supply chain queries (`app/services/data_providers/tavily_supply_chain.py`) — Haiku extraction. Low confidence. 24-hour TTL.
 
-**V1 relationship types:** supplier, customer, manufacturer, parent, subsidiary
+**V1 relationship types:** supplier, customer, manufacturer, parent, subsidiary, competitor
 
 **API:** `GET /supply-chain/{ticker}` — synchronous, cached 24h in `signal_cache`. No Celery, no SSE.
 
