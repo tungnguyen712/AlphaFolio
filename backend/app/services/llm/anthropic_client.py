@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any, TypeVar
 
-from anthropic import APIStatusError, AsyncAnthropic, OverloadedError, RateLimitError
+from anthropic import APIStatusError, AsyncAnthropic, RateLimitError
 from anthropic.types import Message
 from pydantic import BaseModel, ValidationError
 from tenacity import (
@@ -116,7 +116,7 @@ def get_client() -> AsyncAnthropic:
 
 
 @retry(
-    retry=retry_if_exception_type((RateLimitError, APIStatusError, OverloadedError)),
+    retry=retry_if_exception_type((RateLimitError, APIStatusError)),
     wait=wait_exponential(multiplier=1, min=4, max=60) + wait_random(0, 2),
     stop=stop_after_attempt(6),
     reraise=True,
