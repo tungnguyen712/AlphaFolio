@@ -3,9 +3,10 @@
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { isDemoMode } from "@/lib/demo";
 import type { NotificationOut } from "@/lib/types";
 
 function notifHref(n: NotificationOut): string {
@@ -35,6 +36,9 @@ export function Nav() {
   const router = useRouter();
   const { notifications, unreadCount, markRead } = useNotifications(false);
   const [bellOpen, setBellOpen] = useState(false);
+
+  const [isDemo, setIsDemo] = useState(false);
+  useEffect(() => { setIsDemo(isDemoMode()); }, []);
 
   const isActive = (prefix: string) =>
     pathname.startsWith(prefix)
@@ -159,7 +163,13 @@ export function Nav() {
           </div>
 
           <ThemeToggle />
-          <UserButton afterSignOutUrl="/sign-in" />
+          {isDemo ? (
+            <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+              Demo
+            </span>
+          ) : (
+            <UserButton afterSignOutUrl="/sign-in" />
+          )}
         </div>
       </div>
     </nav>

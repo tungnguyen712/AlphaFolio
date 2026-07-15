@@ -32,6 +32,8 @@ logger = logging.getLogger(__name__)
 _JWKS_CACHE_TTL_SECONDS = 60 * 60
 _DEV_USER_CLERK_ID = "dev-user"
 _DEV_USER_EMAIL = "dev@alphafolio.local"
+_DEMO_USER_CLERK_ID = "demo-recruiter"
+_DEMO_USER_EMAIL = "demo@alphafolio.app"
 
 # In-memory JWKS cache. Single-process — fine for a Docker-Compose backend.
 # Re-fetches on TTL expiry or on `kid` miss (rotation).
@@ -195,6 +197,10 @@ async def get_current_user(request: Request) -> User:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="empty bearer token"
         )
+
+    # Demo / recruiter bypass — token matches the shared secret, no JWKS needed.
+    if settings.demo_bypass_token and token == settings.demo_bypass_token:
+        return await _get_or_create_user(_DEMO_USER_CLERK_ID, _DEMO_USER_EMAIL)
 
     claims = await _verify_jwt(token)
     clerk_id = claims.get("sub")

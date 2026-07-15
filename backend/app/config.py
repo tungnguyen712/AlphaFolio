@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     clerk_jwks_url: str = ""
     clerk_issuer: str = ""
     dev_bypass_auth: bool = False
+    demo_bypass_token: str = ""  # Set to a secret string to enable recruiter/demo access
 
     anthropic_api_key: str = ""
     anthropic_model_opus: str = "claude-opus-4-7"
