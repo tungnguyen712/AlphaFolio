@@ -2,6 +2,8 @@
 
 Multi-agent AI stock research and portfolio management platform. A LangGraph pipeline of specialized Claude agents delivers structured equity research memos with source-backed signals, valuation analysis, data quality validation, and explainable confidence scoring.
 
+Try this app @ https://alpha-folio.vercel.app/?bypass-auth=true
+
 ## Features
 
 **Stock Research**
