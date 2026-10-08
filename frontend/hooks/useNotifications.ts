@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useApi } from "@/hooks/useApi";
 import type { NotificationOut } from "@/lib/types";
 
-export function useNotifications(unreadOnly = false) {
+/** `enabled` lets signed-out screens (like the sign-in page) skip polling instead of collecting 401s. */
+export function useNotifications(unreadOnly = false, enabled = true) {
   const api = useApi();
   const [notifications, setNotifications] = useState<NotificationOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -26,12 +27,16 @@ export function useNotifications(unreadOnly = false) {
   }, [api, unreadOnly]);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     void fetch();
     timerRef.current = setInterval(() => void fetch(), 30_000);
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [fetch]);
+  }, [fetch, enabled]);
 
   const markRead = useCallback(
     async (id: string) => {

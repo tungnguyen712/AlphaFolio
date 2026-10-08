@@ -1,12 +1,12 @@
 "use client";
 
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { isDemoMode } from "@/lib/demo";
+import { exitDemoMode, isDemoMode } from "@/lib/demo";
 import type { NotificationOut } from "@/lib/types";
 
 function notifHref(n: NotificationOut): string {
@@ -34,10 +34,11 @@ function notifHref(n: NotificationOut): string {
 export function Nav() {
   const pathname = usePathname();
   const router = useRouter();
-  const { notifications, unreadCount, markRead } = useNotifications(false);
   const [bellOpen, setBellOpen] = useState(false);
 
   const [isDemo, setIsDemo] = useState(false);
+  const { isSignedIn } = useAuth();
+  const { notifications, unreadCount, markRead } = useNotifications(false, isDemo || !!isSignedIn);
   const [today, setToday] = useState("");
   useEffect(() => {
     setIsDemo(isDemoMode());
@@ -162,7 +163,17 @@ export function Nav() {
 
           <ThemeToggle />
           {isDemo ? (
-            <span className="rounded-sm bg-highlight px-2 py-0.5 text-sm font-semibold text-[#111]">Demo</span>
+            <button
+              type="button"
+              onClick={() => {
+                exitDemoMode();
+                window.location.assign("/sign-in");
+              }}
+              title="Leave demo mode and go to sign in"
+              className="rounded-sm bg-highlight px-2 py-0.5 text-sm font-semibold text-[#111] hover:opacity-80"
+            >
+              Demo, exit
+            </button>
           ) : (
             <UserButton afterSignOutUrl="/sign-in" />
           )}

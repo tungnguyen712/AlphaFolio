@@ -1,6 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { DEMO_COOKIE } from "@/lib/demo";
+import { DEMO_COOKIE, DEMO_COOKIE_MAX_AGE_S } from "@/lib/demo";
 
 const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
 
@@ -12,7 +12,7 @@ export default clerkMiddleware(async (auth, request) => {
     // If no path remains, go straight to /research
     if (url.pathname === "/") url.pathname = "/research";
     const response = NextResponse.redirect(url);
-    response.cookies.set(DEMO_COOKIE, "1", { path: "/", sameSite: "lax" });
+    response.cookies.set(DEMO_COOKIE, "1", { path: "/", sameSite: "lax", maxAge: DEMO_COOKIE_MAX_AGE_S });
     return response;
   }
 
@@ -24,6 +24,10 @@ export default clerkMiddleware(async (auth, request) => {
   if (!isPublicRoute(request)) {
     await auth.protect();
   }
+}, {
+  // Use the app's own sign-in/up pages (they carry the demo button) instead of Clerk's hosted portal.
+  signInUrl: "/sign-in",
+  signUpUrl: "/sign-up",
 });
 
 export const config = {

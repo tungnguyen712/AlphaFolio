@@ -126,3 +126,9 @@ a.text-action:hover {
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Clerk sign-in/up card: keep the "Don't have an account?" row, drop the "Secured by Clerk" and
+   "Development mode" strip beneath it. That strip is the footer's other child and has no stable class. */
+.cl-footer > :not(.cl-footerAction) {
+  display: none !important;
+}
