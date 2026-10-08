@@ -37,6 +37,7 @@ from tenacity import (
 )
 
 from app.config import get_settings
+from app.services.llm.style import STYLE_RULES, scrub_em_dashes
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -155,7 +156,7 @@ async def call_structured(
         system=[
             {
                 "type": "text",
-                "text": system,
+                "text": system + STYLE_RULES,
                 "cache_control": {"type": "ephemeral"},
             }
         ],
@@ -172,7 +173,7 @@ async def call_structured(
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
         )
 
-    payload = _extract_tool_input(response)
+    payload = scrub_em_dashes(_extract_tool_input(response))
     payload = _unwrap_if_wrapped(payload, output_model)
     payload = _coerce_stringified_collections(payload)
     try:

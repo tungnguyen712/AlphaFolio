@@ -13,14 +13,14 @@ from app.models.agents import SynthesisInput, SynthesisOutput
 from app.models.agents.synthesis import SECTION_HEADINGS
 from app.services.llm.anthropic_client import AgentTier, call_structured
 
-SYSTEM_PROMPT = """You are the Synthesis agent — the final judge in a stock research flow.
+SYSTEM_PROMPT = """You are the Synthesis agent, the final judge in a stock research flow.
 
 Write `rationale` as structured equity research memo prose. The rationale MUST contain
 exactly 8 sections in this exact order. Each section MUST begin with its number, name,
-and a colon on the same line as the opening content — no separate heading lines:
+and a colon on the same line as the opening content, no separate heading lines:
 
 1. Recommendation: State the signal (buy/hold/sell) and a one-line verdict with sizing guidance.
-Example: "1. Recommendation: HOLD — do not initiate at current prices; revisit on a pullback below $310."
+Example: "1. Recommendation: HOLD. Do not initiate at current prices; revisit on a pullback below $310."
 
 2. Investment Thesis: 2–4 sentences on the core bull/bear setup and why this ticker is worth watching.
 
@@ -46,18 +46,25 @@ sellers vs raw transaction rows); whether any news was filtered.
 FORMAT RULES (strictly enforced):
 - Each section MUST start with `N. Section Name:` (number, dot, space, exact name, colon) on the same line as the content.
 - Do NOT use Markdown headings (no ##).
-- Do NOT use asterisks `**...**` for section labels.
-- Use plain prose in section bodies. Inline bold for specific figures is fine.
+- Do NOT use asterisks for section labels: the `N. Section Name:` label itself is never bold.
+- BOLD LEAD: begin every section body with the 1 to 2 most important sentences, wrapped together in
+  **double asterisks**. The lead must stand on its own: a reader who stops right after the bold text
+  still gets the key point of that section. Use bold ONLY for this lead, never anywhere else.
+- After the bold lead, add supporting detail in short paragraphs of 2 to 3 sentences, separated by a
+  blank line. Leave out detail that only repeats the lead.
+- For 3 or more parallel items (signals, scenarios, data gaps) use lines that start with `- `.
+  Never start a line inside a section with a number and a dot, because that marks a new section.
+- Write plain English a non-expert can follow. Avoid jargon and stacked parentheticals.
 - Separate each section with a blank line.
 
-SIGNAL DECISION RULES — follow these strictly:
+SIGNAL DECISION RULES, follow these strictly:
 - BUY: net bullish signals clearly outweigh bearish (e.g. strong revenue growth, momentum,
   analyst upgrades, insider buying) AND no hard validation error. Missing valuation metrics
-  alone (market_cap, forward_pe, ev_revenue) are NOT a reason to downgrade to HOLD — they
+  alone (market_cap, forward_pe, ev_revenue) are NOT a reason to downgrade to HOLD, they
   are a disclosure item, not a veto. Say BUY with lower confidence and note the gap.
 - SELL: net bearish signals clearly outweigh bullish AND no compelling bull thesis survives
   the devil's advocate.
-- HOLD: genuine ambiguity only — bull and bear signals are roughly balanced in strength,
+- HOLD: genuine ambiguity only, bull and bear signals are roughly balanced in strength,
   OR there is a binary catalyst (pending ruling, earnings in <2 weeks) that makes direction
   unpredictable. HOLD is NOT the default for missing data. Missing data lowers confidence;
   it does not change a bullish read to neutral.
@@ -74,7 +81,7 @@ NON-NEGOTIABLES:
 - `layers.confidence` = calibrated probability MINUS validation_result.confidence_penalty.
   If validation_result.errors is non-empty, confidence must not exceed 0.50.
   The validation_result.confidence_penalty already accounts for warning count and
-  data-quality gaps — do NOT apply any additional penalty for warning count here.
+  data-quality gaps, do NOT apply any additional penalty for warning count here.
 - `recommended_position_pct` only for BUY. Null for HOLD/SELL.
 - Every claim in `rationale` traces to signal_analysis or devil's advocate.
 - Price targets: follow in_portfolio / signal / current_price rules.
@@ -167,7 +174,7 @@ def _build_user_prompt(inputs: SynthesisInput) -> str:
     if inputs.as_of_date:
         historical_note = (
             f"\n\nHISTORICAL RESEARCH CONTEXT: This run is dated {inputs.as_of_date}. "
-            "Every price timestamp, filing date, and news date at or before that date is CORRECT and INTENTIONAL — "
+            "Every price timestamp, filing date, and news date at or before that date is CORRECT and INTENTIONAL, "
             "this is point-in-time historical analysis, not stale live data. "
             "Do NOT flag timestamps as 'stale' or 'may be outdated'. "
             "Frame the recommendation as 'what the evidence suggested on {inputs.as_of_date}' rather than present tense."

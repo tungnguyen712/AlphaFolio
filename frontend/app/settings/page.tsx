@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useGetToken } from "@/hooks/useGetToken";
 import { getMe, getTelegramToken, patchMe } from "@/lib/api";
 import type { UserOut } from "@/lib/types";
 import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
+import { Chip } from "@/components/ui/Chip";
+import { ErrorState } from "@/components/ui/Panel";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 export default function SettingsPage() {
-  const { getToken } = useAuth();
-  const gt = () => getToken();
+  const gt = useGetToken();
 
   const [user, setUser] = useState<UserOut | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,66 +64,52 @@ export default function SettingsPage() {
   if (loading) return <Spinner />;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <h2 className="text-xl font-bold text-neutral-900 dark:text-zinc-100">Settings</h2>
+    <div>
+      <PageHeader title="Settings" />
+      <div className="max-w-form">
 
       {error && (
-        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/40 dark:text-red-400">
-          {error}
-        </p>
+        <div className="mb-6">
+          <ErrorState title="Something went wrong" message={error} />
+        </div>
       )}
 
-      {/* Telegram connection */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-        <h3 className="mb-1 text-base font-semibold text-neutral-900 dark:text-zinc-100">
-          Telegram Notifications
-        </h3>
-        <p className="mb-4 text-sm text-neutral-500 dark:text-zinc-400">
-          Receive price alerts and watch reminders directly in Telegram.
+      <section className="border-t border-rule pt-6">
+        <h2 className="text-xl font-semibold text-ink">Telegram notifications</h2>
+        <p className="mb-4 mt-1 text-base text-muted">
+          Get price alerts and watch reminders in Telegram as well as in the app.
         </p>
 
         {user?.telegram_connected ? (
-          <div className="flex items-center gap-4">
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-green-50 px-3 py-1 text-sm font-medium text-green-700 dark:bg-green-950/40 dark:text-green-400">
-              <span className="h-2 w-2 rounded-full bg-green-500" />
-              Connected
-              {user.telegram_chat_id && (
-                <span className="ml-1 font-mono text-xs text-green-600 dark:text-green-500">
-                  (chat {user.telegram_chat_id})
-                </span>
-              )}
-            </span>
-            <button
-              onClick={() => void handleDisconnect()}
-              disabled={disconnecting}
-              className="rounded-lg border border-red-200 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/40"
-            >
-              {disconnecting ? "Disconnecting…" : "Disconnect"}
-            </button>
+          <div className="flex flex-wrap items-center gap-4">
+            <Chip tone="buy">
+              Connected{user.telegram_chat_id ? `, chat ${user.telegram_chat_id}` : ""}
+            </Chip>
+            <Button variant="secondary" onClick={() => void handleDisconnect()} disabled={disconnecting}>
+              {disconnecting ? "Disconnecting" : "Disconnect"}
+            </Button>
           </div>
         ) : (
-          <div className="space-y-3">
-            <p className="text-sm text-neutral-600 dark:text-zinc-400">
-              Click below to open Telegram and send the bot a message to link your account.
-              The link expires in 10 minutes.
-            </p>
-            <button
-              onClick={() => void handleConnect()}
-              disabled={linking}
-              className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50"
-            >
+          <div className="space-y-4">
+            <ol className="list-decimal space-y-1 pl-5 text-base text-ink">
+              <li>Select Connect Telegram to open the bot.</li>
+              <li>Press Start in Telegram to link your account.</li>
+              <li>Come back to this tab. The link expires after 10 minutes.</li>
+            </ol>
+            <Button onClick={() => void handleConnect()} disabled={linking}>
               {linking ? (
-                <>Generating link…</>
+                "Generating link"
               ) : (
                 <>
                   <TelegramIcon className="h-4 w-4" />
                   Connect Telegram
                 </>
               )}
-            </button>
+            </Button>
           </div>
         )}
       </section>
+      </div>
     </div>
   );
 }

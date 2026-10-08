@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { RunProgressPanel } from "@/components/ui/RunProgressPanel";
+import { PageHeader } from "@/components/ui/PageHeader";
 import type { RunStatusOut } from "@/lib/types";
 
 export default function ResearchRunPage({ params }: { params: { id: string } }) {
@@ -17,8 +18,14 @@ export default function ResearchRunPage({ params }: { params: { id: string } }) 
 
   return (
     <div>
-      <h2 className="mb-4 text-base font-semibold text-neutral-800 dark:text-zinc-100">Research in progress</h2>
-      <RunProgressPanel runId={params.id} onComplete={handleComplete} />
+      <PageHeader
+        title="Research in progress"
+        description="You'll be taken to the result as soon as the last agent finishes."
+      />
+
+      <div className="max-w-form">
+        <RunProgressPanel runId={params.id} onComplete={handleComplete} />
+      </div>
     </div>
   );
 }

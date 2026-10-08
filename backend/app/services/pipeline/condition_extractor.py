@@ -1,4 +1,4 @@
-"""Condition extractor — converts a finished SynthesisOutput into watch triggers.
+"""Condition extractor, converts a finished SynthesisOutput into watch triggers.
 
 Two layers:
   Layer A (deterministic, no LLM):
@@ -85,7 +85,7 @@ async def extract_triggers(
     """Return unsaved RebalanceTrigger rows for a finished research report.
 
     Runs Layer A (deterministic) and Layer B (Haiku) concurrently.
-    Never raises — logs errors and returns whatever was collected.
+    Never raises, logs errors and returns whatever was collected.
     """
     layer_a, layer_b = await asyncio.gather(
         _layer_a(synthesis_out, user_id, report_id, ticker, as_of_date),
@@ -108,7 +108,7 @@ async def extract_triggers(
 
 
 # ---------------------------------------------------------------------------
-# Layer A — deterministic
+# Layer A, deterministic
 # ---------------------------------------------------------------------------
 
 
@@ -159,7 +159,7 @@ async def _layer_a(
             )
         )
 
-    # Earnings date — skip for historical (as_of) runs to prevent look-ahead bias
+    # Earnings date, skip for historical (as_of) runs to prevent look-ahead bias
     if as_of_date is None:
         earnings_dt = await _fetch_next_earnings(ticker)
         if earnings_dt:
@@ -226,7 +226,7 @@ async def _fetch_next_earnings(ticker: str) -> date | None:
 
 
 # ---------------------------------------------------------------------------
-# Layer B — Haiku extraction
+# Layer B, Haiku extraction
 # ---------------------------------------------------------------------------
 
 

@@ -34,7 +34,7 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
   const [showAddForm, setShowAddForm] = useState(false);
 
   if (loading) return <Spinner />;
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (error) return <p className="text-sm text-sell">{error}</p>;
   if (!portfolio) return null;
 
   const startEdit = (h: HoldingOut) => {
@@ -79,10 +79,10 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-neutral-800 dark:text-zinc-100">Holdings</h3>
+        <h3 className="text-xl font-semibold text-ink">Holdings</h3>
         <button
           onClick={() => setShowAddForm((v) => !v)}
-          className="rounded-md bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-neutral-700 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+          className="rounded bg-action px-3 py-1.5 text-sm font-medium text-action-ink hover:opacity-90"
         >
           {showAddForm ? "Cancel" : "+ Add holding"}
         </button>
@@ -91,47 +91,47 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
       {showAddForm && (
         <form
           onSubmit={(e) => void handleAdd(e)}
-          className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+          className="rounded-lg border border-rule bg-surface p-5"
         >
           <div className="grid gap-4 sm:grid-cols-4">
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Ticker</label>
+              <label className="mb-1 block text-sm font-medium text-ink">Ticker</label>
               <input
                 type="text"
                 value={newTicker}
                 onChange={(e) => setNewTicker(e.target.value.toUpperCase())}
                 required
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm uppercase text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded border border-rule px-3 py-2 text-sm text-ink focus:outline-none"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Shares</label>
+              <label className="mb-1 block text-sm font-medium text-ink">Shares</label>
               <input
                 type="text"
                 value={newShares}
                 onChange={(e) => setNewShares(e.target.value)}
                 required
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded border border-rule px-3 py-2 text-sm text-ink focus:outline-none"
                 placeholder="100"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Avg cost</label>
+              <label className="mb-1 block text-sm font-medium text-ink">Avg cost</label>
               <input
                 type="text"
                 value={newAvgCost}
                 onChange={(e) => setNewAvgCost(e.target.value)}
                 required
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded border border-rule px-3 py-2 text-sm text-ink focus:outline-none"
                 placeholder="150.00"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Class</label>
+              <label className="mb-1 block text-sm font-medium text-ink">Class</label>
               <select
                 value={newAssetClass}
                 onChange={(e) => setNewAssetClass(e.target.value as AssetClass)}
-                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded border border-rule bg-surface px-3 py-2 text-sm text-ink focus:outline-none"
               >
                 {assetClasses.map((c) => (
                   <option key={c} value={c}>{c}</option>
@@ -139,11 +139,11 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
               </select>
             </div>
           </div>
-          {addHolding.error && <p className="mt-2 text-xs text-red-600">{addHolding.error}</p>}
+          {addHolding.error && <p className="mt-2 text-sm text-sell">{addHolding.error}</p>}
           <button
             type="submit"
             disabled={addHolding.loading}
-            className="mt-4 flex items-center gap-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+            className="mt-4 flex items-center gap-2 rounded bg-action px-4 py-2 text-sm font-medium text-action-ink hover:opacity-90 disabled:opacity-50"
           >
             {addHolding.loading && <Spinner size="sm" />}
             Add
@@ -154,10 +154,10 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
       {portfolio.holdings.length === 0 ? (
         <EmptyState title="No holdings" description="Add your first holding above." />
       ) : (
-        <div className="rounded-xl border border-neutral-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="rounded-lg border border-rule bg-surface">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-neutral-100 text-xs text-neutral-500 dark:border-zinc-800 dark:text-zinc-400">
+              <tr className="border-b border-rule text-sm text-muted">
                 <th className="px-6 py-3 text-left font-medium">Ticker</th>
                 <th className="px-6 py-3 text-right font-medium">Shares</th>
                 <th className="px-6 py-3 text-right font-medium">Avg cost</th>
@@ -165,17 +165,17 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
                 <th className="px-6 py-3" />
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-50 dark:divide-zinc-800">
+            <tbody className="divide-y divide-rule ">
               {portfolio.holdings.map((h) =>
                 editId === h.id ? (
-                  <tr key={h.id} className="bg-neutral-50 dark:bg-zinc-800/60">
-                    <td className="px-6 py-3 font-semibold text-neutral-900 dark:text-zinc-100">{h.ticker}</td>
+                  <tr key={h.id} className="bg-rule/30">
+                    <td className="px-6 py-3 font-semibold text-ink">{h.ticker}</td>
                     <td className="px-6 py-3">
                       <input
                         type="text"
                         value={editState.shares}
                         onChange={(e) => setEditState((s) => ({ ...s, shares: e.target.value }))}
-                        className="w-24 rounded border border-neutral-300 px-2 py-1 text-right text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                        className="w-24 rounded border border-rule px-2 py-1 text-right text-sm text-ink focus:outline-none"
                       />
                     </td>
                     <td className="px-6 py-3">
@@ -183,7 +183,7 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
                         type="text"
                         value={editState.avg_cost}
                         onChange={(e) => setEditState((s) => ({ ...s, avg_cost: e.target.value }))}
-                        className="w-28 rounded border border-neutral-300 px-2 py-1 text-right text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                        className="w-28 rounded border border-rule px-2 py-1 text-right text-sm text-ink focus:outline-none"
                       />
                     </td>
                     <td className="px-6 py-3">
@@ -192,7 +192,7 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
                         onChange={(e) =>
                           setEditState((s) => ({ ...s, asset_class: e.target.value as AssetClass }))
                         }
-                        className="rounded border border-neutral-300 bg-white px-2 py-1 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                        className="rounded border border-rule bg-surface px-2 py-1 text-sm text-ink focus:outline-none"
                       >
                         {assetClasses.map((c) => (
                           <option key={c} value={c}>{c}</option>
@@ -204,13 +204,13 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
                         <button
                           onClick={() => void handleUpdate(h.id)}
                           disabled={updateHolding.loading}
-                          className="text-xs font-medium text-green-700 hover:underline"
+                          className="text-sm font-medium text-buy hover:underline"
                         >
                           Save
                         </button>
                         <button
                           onClick={() => setEditId(null)}
-                          className="text-xs text-neutral-400 hover:underline dark:text-zinc-500"
+                          className="text-sm text-muted hover:underline"
                         >
                           Cancel
                         </button>
@@ -218,23 +218,23 @@ export default function HoldingsPage({ params }: { params: { id: string } }) {
                     </td>
                   </tr>
                 ) : (
-                  <tr key={h.id} className="hover:bg-neutral-50 dark:hover:bg-zinc-800/40">
-                    <td className="px-6 py-3 font-semibold text-neutral-900 dark:text-zinc-100">{h.ticker}</td>
-                    <td className="px-6 py-3 text-right text-neutral-700 dark:text-zinc-300">{parseFloat(h.shares).toLocaleString()}</td>
-                    <td className="px-6 py-3 text-right text-neutral-700 dark:text-zinc-300">${parseFloat(h.avg_cost).toFixed(2)}</td>
-                    <td className="px-6 py-3 text-xs text-neutral-600 dark:text-zinc-400">{h.asset_class}</td>
+                  <tr key={h.id} className="hover:bg-rule/30">
+                    <td className="px-6 py-3 font-semibold text-ink">{h.ticker}</td>
+                    <td className="px-6 py-3 text-right text-ink">{parseFloat(h.shares).toLocaleString()}</td>
+                    <td className="px-6 py-3 text-right text-ink">${parseFloat(h.avg_cost).toFixed(2)}</td>
+                    <td className="px-6 py-3 text-sm text-ink">{h.asset_class}</td>
                     <td className="px-6 py-3 text-right">
                       <div className="flex items-center justify-end gap-3">
                         <button
                           onClick={() => startEdit(h)}
-                          className="text-xs text-neutral-500 hover:underline dark:text-zinc-400"
+                          className="text-sm text-muted hover:underline"
                         >
                           Edit
                         </button>
                         <button
                           onClick={() => void handleDelete(h.id)}
                           disabled={deleteHolding.loading}
-                          className="text-xs text-red-500 hover:underline"
+                          className="text-sm text-sell hover:underline"
                         >
                           Delete
                         </button>

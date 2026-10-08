@@ -2,58 +2,69 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/Button";
+import { inputClass } from "@/components/ui/Field";
+import { PageHeader } from "@/components/ui/PageHeader";
+
+const EXAMPLES = ["NVDA", "AAPL", "TSLA", "AMZN"];
 
 export default function SupplyChainHome() {
   const router = useRouter();
   const [ticker, setTicker] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const t = ticker.trim().toUpperCase();
+  const go = (value: string) => {
+    const t = value.trim().toUpperCase();
     if (!t) return;
     router.push(`/supply-chain/${t}`);
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    go(ticker);
+  };
+
   return (
-    <main className="mx-auto max-w-2xl px-6 py-16">
-      <div className="mb-8 text-center">
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
-          Supply Chain
-        </h1>
-        <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-          Explore supplier, customer, manufacturer, and corporate relationships
-          for any publicly traded company.
-        </p>
-      </div>
-      <form
-        onSubmit={handleSubmit}
-        className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-      >
-        <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-          Ticker symbol
+    <div>
+      <PageHeader
+        title="Supply chain"
+        description="See who a company buys from, sells to, and is owned by. This maps relationships; it doesn't recommend anything."
+      />
+      <form onSubmit={handleSubmit} className="max-w-3xl">
+        <label htmlFor="sc-ticker" className="mb-2 block text-lg font-medium text-ink">
+          Which company do you want to map?
         </label>
         <div className="flex gap-3">
           <input
+            id="sc-ticker"
             type="text"
             value={ticker}
             onChange={(e) => setTicker(e.target.value.toUpperCase())}
             placeholder="NVDA"
-            className="flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-sm uppercase text-zinc-900 placeholder-zinc-400 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder-zinc-600"
+            autoComplete="off"
+            className={`${inputClass} h-14 flex-1 text-2xl font-semibold tracking-wide`}
             maxLength={10}
           />
-          <button
-            type="submit"
-            disabled={!ticker.trim()}
-            className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-40"
-          >
-            Explore
-          </button>
+          <Button type="submit" size="lg" className="h-14" disabled={!ticker.trim()}>
+            Map supply chain
+          </Button>
         </div>
-        <p className="mt-3 text-xs text-zinc-400 dark:text-zinc-500">
-          Data sources: SEC 10-K filings, Wikidata corporate structure.
-          Results cached 24h.
+        <div className="mt-4 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-muted">Try</span>
+          {EXAMPLES.map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => go(t)}
+              className="rounded border border-rule bg-surface px-3 py-1 text-sm font-medium text-ink hover:border-action hover:text-action"
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <p className="mt-6 max-w-reading text-sm text-muted">
+          Built from SEC 10-K filings, Wikidata, GLEIF, and news. Results are cached for 24 hours.
         </p>
       </form>
-    </main>
+    </div>
   );
 }

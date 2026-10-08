@@ -39,7 +39,7 @@ You must call the record_output tool with the required fields filled in."""
 
 
 class _NarrativeOnly(BaseModel):
-    """Internal LLM-output shape — we already have structured news/analyst/macro,
+    """Internal LLM-output shape, we already have structured news/analyst/macro,
     and only ask the LLM for the narrative summary on top."""
 
     narrative_summary: str = Field(max_length=1200)
@@ -48,7 +48,7 @@ class _NarrativeOnly(BaseModel):
 async def _company_name_for_filter(ticker: str) -> str | None:
     """Resolve the human-readable company name for news relevance filtering.
 
-    Finnhub articles say 'Nvidia' not 'NVDA' — passing the clean company name
+    Finnhub articles say 'Nvidia' not 'NVDA', passing the clean company name
     lets filter_news match on the full name, not just the ticker symbol.
     Result is cached by _resolve_cik (24h TTL) so overhead is one fast DB read
     after the first call.
@@ -89,7 +89,7 @@ async def run(inputs: MarketIntelInput) -> MarketIntelOutput:
         raw_news = [NewsItem.model_validate(n) for n in news_bundle.get("news_items", [])]
         company_name = None
 
-    # Historical mode: skip the Polygon stub entirely — it is fixture-based and
+    # Historical mode: skip the Polygon stub entirely, it is fixture-based and
     # always returns current-dated analyst changes and macro context, which would
     # inject look-ahead data into a historical run and produce timestamp collisions
     # that the LLM correctly flags as inconsistencies, tanking confidence.

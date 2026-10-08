@@ -26,7 +26,7 @@ optimizer (solver_result). Your job is to:
 
   1. Use solver_result.weights as the STARTING POINT for target_allocations.
      You may deviate from solver weights only when a strong research signal or
-     risk-profile constraint justifies it — explain any deviation explicitly.
+     risk-profile constraint justifies it, explain any deviation explicitly.
   2. Translate weight changes into proposed_trades (buy / sell / trim / add).
   3. Respect the risk profile. Conservative = prefer trims; aggressive = willing
      to concentrate up to the solver’s max-weight cap.

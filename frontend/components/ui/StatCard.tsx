@@ -11,27 +11,18 @@ interface StatCardProps {
   loading?: boolean;
 }
 
-export function StatCard({ label, value, delta, mono = true, loading = false }: StatCardProps) {
+// `mono` is kept for call-site compatibility; figures use tabular numerals in the sans face.
+export function StatCard({ label, value, delta, loading = false }: StatCardProps) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <p className="text-xs font-medium uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-        {label}
-      </p>
+    <div className="border-t-[3px] border-ink pt-3">
+      <p className="text-sm text-muted">{label}</p>
       {loading ? (
-        <div className="mt-2 h-7 w-28 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+        <div className="mt-2 h-8 w-28 animate-pulse rounded bg-rule/60" />
       ) : (
-        <p className={`mt-1 text-xl font-bold text-zinc-900 dark:text-zinc-100 ${mono ? "font-mono" : ""}`}>
-          {value}
-        </p>
+        <p className="mt-0.5 font-serif text-2xl font-semibold text-ink">{value}</p>
       )}
       {delta && !loading && (
-        <p
-          className={`mt-1 text-xs font-medium font-mono ${
-            delta.positive
-              ? "text-emerald-600 dark:text-emerald-400"
-              : "text-red-600 dark:text-red-400"
-          }`}
-        >
+        <p className={`mt-0.5 text-sm font-medium tabular-nums ${delta.positive ? "text-buy" : "text-sell"}`}>
           {delta.positive ? "▲" : "▼"} {delta.value}
         </p>
       )}

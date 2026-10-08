@@ -50,28 +50,28 @@ function PendingCard({
   };
 
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="rounded-lg border border-rule bg-surface p-5">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-base font-bold text-neutral-900 dark:text-zinc-100">{pending.ticker}</p>
-          <p className="mt-0.5 text-xs text-neutral-500 dark:text-zinc-400">
+          <p className="text-base font-bold text-ink">{pending.ticker}</p>
+          <p className="mt-0.5 text-sm text-muted">
             Target {Math.round(parseFloat(pending.target_pct) * 100)}% allocation
           </p>
-          <p className="mt-0.5 text-xs text-neutral-400 dark:text-zinc-500">
+          <p className="mt-0.5 text-sm text-muted">
             Added {new Date(pending.created_at).toLocaleDateString()}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setAcceptOpen((v) => !v)}
-            className="rounded-md bg-green-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600"
+            className="rounded bg-buy px-3 py-1.5 text-sm font-medium text-action-ink hover:opacity-90"
           >
             Accept
           </button>
           <button
             onClick={() => void handleReject()}
             disabled={rejecting}
-            className="rounded-md border border-red-300 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-50"
+            className="rounded border border-sell/40 px-3 py-1.5 text-sm font-medium text-sell hover:bg-sell-soft disabled:opacity-50"
           >
             Reject
           </button>
@@ -81,37 +81,37 @@ function PendingCard({
       {acceptOpen && (
         <form
           onSubmit={(e) => void handleAccept(e)}
-          className="mt-4 border-t border-neutral-100 pt-4 dark:border-zinc-800"
+          className="mt-4 border-t border-rule pt-4"
         >
           <div className="grid gap-3 sm:grid-cols-3">
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Shares</label>
+              <label className="mb-1 block text-sm font-medium text-ink">Shares</label>
               <input
                 type="text"
                 value={form.shares}
                 onChange={(e) => setForm((s) => ({ ...s, shares: e.target.value }))}
                 required
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded border border-rule px-3 py-2 text-sm text-ink focus:outline-none"
                 placeholder="100"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Avg cost</label>
+              <label className="mb-1 block text-sm font-medium text-ink">Avg cost</label>
               <input
                 type="text"
                 value={form.avg_cost}
                 onChange={(e) => setForm((s) => ({ ...s, avg_cost: e.target.value }))}
                 required
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded border border-rule px-3 py-2 text-sm text-ink focus:outline-none"
                 placeholder="150.00"
               />
             </div>
             <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Class</label>
+              <label className="mb-1 block text-sm font-medium text-ink">Class</label>
               <select
                 value={form.asset_class}
                 onChange={(e) => setForm((s) => ({ ...s, asset_class: e.target.value as AssetClass }))}
-                className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className="w-full rounded border border-rule bg-surface px-3 py-2 text-sm text-ink focus:outline-none"
               >
                 {assetClasses.map((c) => (
                   <option key={c} value={c}>{c}</option>
@@ -119,12 +119,12 @@ function PendingCard({
               </select>
             </div>
           </div>
-          {acceptError && <p className="mt-2 text-xs text-red-600">{acceptError}</p>}
+          {acceptError && <p className="mt-2 text-sm text-sell">{acceptError}</p>}
           <div className="mt-3 flex items-center gap-2">
             <button
               type="submit"
               disabled={accepting}
-              className="flex items-center gap-1 rounded-md bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+              className="flex items-center gap-1 rounded bg-action px-3 py-1.5 text-sm font-medium text-action-ink hover:opacity-90 disabled:opacity-50"
             >
               {accepting && <Spinner size="sm" />}
               Confirm
@@ -132,7 +132,7 @@ function PendingCard({
             <button
               type="button"
               onClick={() => setAcceptOpen(false)}
-              className="text-xs text-neutral-400 hover:underline dark:text-zinc-500"
+              className="text-sm text-muted hover:underline"
             >
               Cancel
             </button>
@@ -147,11 +147,11 @@ export default function PendingPage({ params }: { params: { id: string } }) {
   const { data: pending, loading, error, refetch } = usePendingPositions(params.id);
 
   if (loading) return <Spinner />;
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (error) return <p className="text-sm text-sell">{error}</p>;
 
   return (
     <div>
-      <h3 className="mb-4 text-sm font-semibold text-neutral-800 dark:text-zinc-100">Pending positions</h3>
+      <h3 className="mb-4 text-xl font-semibold text-ink">Pending positions</h3>
       {pending.length === 0 ? (
         <EmptyState
           title="No pending positions"

@@ -87,7 +87,14 @@ These exist because of product Rule 3. Do not "simplify" them away.
 ## Collaboration defaults
 
 - Auto-accept routine edits and keep moving; only pause for real forks, sensitive/security changes, or hard-to-reverse actions.
-- Terse responses; skip trailing "here's what I did" summaries — the diff speaks.
+- Terse responses; skip trailing "here's what I did" summaries, the diff speaks.
+
+## No em dashes in anything users read
+
+The owner dislikes the em dash character. It applies to every AI/LLM that writes text a user will see:
+- **Product LLM calls**: every call goes through `call_structured` (`app/services/llm/anthropic_client.py`), which appends `STYLE_RULES` to the system prompt and runs `scrub_em_dashes` on the output (`app/services/llm/style.py`). Do not bypass `call_structured`, and do not put em dashes in prompt examples (models copy them).
+- **Generated copy**: validation warnings, UI text, error messages. Use commas, colons, periods or parentheses. Use `n/a` for empty values, not a dash glyph.
+- **Claude Code replies and commit messages**: same rule.
 
 ## Pipeline quality improvements (added 2026-04, updated 2026-05)
 

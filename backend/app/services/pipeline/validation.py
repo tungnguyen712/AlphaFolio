@@ -1,20 +1,20 @@
 """Pre-synthesis validation gate.
 
-Deterministic Python — no LLM, no network. Checks for common data quality
+Deterministic Python, no LLM, no network. Checks for common data quality
 issues before Synthesis runs. Returns a ValidationResult that Synthesis must
 factor into its confidence calibration.
 
 Penalty tiers:
   - INFRA_PENALTY (0.02): Missing valuation fields that are structural data-stack
     limitations (Polygon doesn't archive historical market_cap/PE/EV). These are
-    not business signals — penalizing them at 0.05 makes every historical run
+    not business signals, penalizing them at 0.05 makes every historical run
     artificially uncertain.
-  - SIGNAL_PENALTY (0.05): Genuine intelligence gaps — no insider data, no news,
+  - SIGNAL_PENALTY (0.05): Genuine intelligence gaps, no insider data, no news,
     no analyst coverage. These reflect real uncertainty about the business.
   - HISTORICAL_GAP_PENALTY (0.01): In historical mode, missing news and analyst
     data is expected (Finnhub free tier, Polygon stub skipped). Treat as minimal.
   - ERROR_PENALTY (0.15): Hard errors (no price data at all).
-  - Cap: 0.40 (reduced from 0.50 — historical runs should not be penalized into
+  - Cap: 0.40 (reduced from 0.50, historical runs should not be penalized into
     paralysis when structural data is unavailable by design).
 """
 from __future__ import annotations
@@ -48,7 +48,7 @@ def validate_research_inputs(
     # --- Price data ---
     if retrieved.price_summary is None:
         errors.append(
-            f"{ticker}: No price data available — cannot compute price-based targets."
+            f"{ticker}: No price data available, cannot compute price-based targets."
         )
         penalty += _ERROR_PENALTY
     else:
@@ -73,20 +73,20 @@ def validate_research_inputs(
         if s.num_distinct_filings > 0 and s.raw_transaction_count > 3 * s.num_distinct_filings:
             warnings.append(
                 f"{ticker}: Insider row count ({s.raw_transaction_count}) is >3× distinct filings "
-                f"({s.num_distinct_filings}) — possible row overcounting in signal analysis."
+                f"({s.num_distinct_filings}), possible row overcounting in signal analysis."
             )
             penalty += _SIGNAL_PENALTY
 
     # --- Analyst / market intel ---
     if market_intel is not None:
         # In historical mode, empty analyst and news are expected gaps (Polygon skipped,
-        # Finnhub free tier limited) — apply minimal penalty rather than full signal gap.
+        # Finnhub free tier limited), apply minimal penalty rather than full signal gap.
         empty_news_penalty = _HIST_GAP_PENALTY if is_historical else _SIGNAL_PENALTY
         empty_analyst_penalty = _HIST_GAP_PENALTY if is_historical else _SIGNAL_PENALTY
 
         if market_intel.analyst_signal_source == "news_reported_analyst_signal":
             warnings.append(
-                f"{ticker}: analyst_changes is empty — analyst data sourced from news snippets only. "
+                f"{ticker}: analyst_changes is empty, analyst data sourced from news snippets only. "
                 "Do not present as structured consensus."
             )
             penalty += empty_analyst_penalty
@@ -98,7 +98,7 @@ def validate_research_inputs(
             ]
             if stale:
                 warnings.append(
-                    f"{ticker}: {len(stale)} analyst change(s) are older than 180 days — treat as stale."
+                    f"{ticker}: {len(stale)} analyst change(s) are older than 180 days, treat as stale."
                 )
                 penalty += _SIGNAL_PENALTY
 

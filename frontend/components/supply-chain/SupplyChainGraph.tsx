@@ -12,16 +12,23 @@ import {
   type Edge,
   type NodeProps,
 } from "@xyflow/react";
+import { useTheme } from "next-themes";
 import type { SupplyChainReport, RelationshipKind } from "@/lib/types";
 
 // Only show these four — parent/subsidiary live in the Cards view
 const SHOWN_KINDS: RelationshipKind[] = ["supplier", "customer", "manufacturer", "competitor"];
 
+// Theme tokens (see globals.css), so the graph follows light/dark mode.
+const tone = (v: string) => ({
+  bg: `rgb(var(--${v}) / 0.12)`,
+  text: "rgb(var(--ink))",
+  border: `rgb(var(--${v}))`,
+});
 const REL_COLOR: Record<string, { bg: string; text: string; border: string }> = {
-  supplier:     { bg: "#3f3f46", text: "#e4e4e7", border: "#71717a" },
-  customer:     { bg: "#1e3a5f", text: "#bfdbfe", border: "#3b82f6" },
-  manufacturer: { bg: "#14532d", text: "#bbf7d0", border: "#22c55e" },
-  competitor:   { bg: "#4c1d1d", text: "#fecaca", border: "#ef4444" },
+  supplier:     tone("muted"),
+  customer:     tone("action"),
+  manufacturer: tone("buy"),
+  competitor:   tone("sell"),
 };
 
 const GROUP_LABEL: Record<string, string> = {
@@ -33,7 +40,7 @@ const GROUP_LABEL: Record<string, string> = {
 
 // ── Custom node: dotted group boundary ────────────────────────────────────────
 function KindGroupNode({ data }: NodeProps) {
-  const { label, color } = data as { label: string; color: string };
+  const { label, color, tint } = data as { label: string; color: string; tint: string };
   return (
     <div
       style={{
@@ -41,7 +48,7 @@ function KindGroupNode({ data }: NodeProps) {
         height: "100%",
         border: `1.5px dashed ${color}`,
         borderRadius: 12,
-        background: color + "0a",
+        background: tint,
         position: "relative",
         pointerEvents: "none",
       }}
@@ -49,14 +56,12 @@ function KindGroupNode({ data }: NodeProps) {
       <span
         style={{
           position: "absolute",
-          top: -10,
+          top: -11,
           left: 14,
-          background: "#09090b",
+          background: "rgb(var(--paper))",
           padding: "0 6px",
-          fontSize: 9,
-          fontWeight: 700,
-          letterSpacing: "0.09em",
-          textTransform: "uppercase",
+          fontSize: 13,
+          fontWeight: 600,
           color,
           pointerEvents: "none",
         }}
@@ -89,9 +94,9 @@ const SECTOR_ANGLES: Record<string, number> = {
 };
 
 const CENTER_STYLE: React.CSSProperties = {
-  background: "#18181b",
-  color: "#f4f4f5",
-  border: "2px solid #52525b",
+  background: "rgb(var(--surface))",
+  color: "rgb(var(--ink))",
+  border: "2px solid rgb(var(--ink))",
   borderRadius: 12,
   padding: "10px 16px",
   fontSize: 13,
@@ -157,7 +162,7 @@ function buildGraph(report: SupplyChainReport): { nodes: Node[]; edges: Edge[] }
       id: groupId,
       type: "kindGroup",
       position: { x: groupX, y: groupY },
-      data: { label: GROUP_LABEL[kind], color: border },
+      data: { label: GROUP_LABEL[kind], color: border, tint: bg },
       width: groupW,
       height: groupH,
       style: { width: groupW, height: groupH },
@@ -214,6 +219,7 @@ interface Props {
 }
 
 export function SupplyChainGraph({ report }: Props) {
+  const { resolvedTheme } = useTheme();
   const { nodes: initNodes, edges: initEdges } = useMemo(
     () => buildGraph(report),
     [report],
@@ -230,7 +236,7 @@ export function SupplyChainGraph({ report }: Props) {
 
   return (
     <div
-      className="w-full overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800"
+      className="w-full overflow-hidden rounded-lg border border-rule"
       style={{ height: "min(78vh, 860px)", minHeight: 680 }}
     >
       <ReactFlow
@@ -247,9 +253,9 @@ export function SupplyChainGraph({ report }: Props) {
         minZoom={0.3}
         maxZoom={2}
         proOptions={{ hideAttribution: true }}
-        colorMode="dark"
+        colorMode={resolvedTheme === "dark" ? "dark" : "light"}
       >
-        <Background color="#27272a" gap={24} />
+        <Background color="rgb(var(--rule))" gap={24} />
         <Controls showInteractive={false} />
       </ReactFlow>
     </div>

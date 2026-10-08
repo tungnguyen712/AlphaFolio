@@ -1,7 +1,7 @@
 """Signal Analysis agent (Opus tier).
 
 Takes the retrieved data + market intel, emits a ranked list of bull/bear
-signals. Every signal must carry at least one source — so a downstream
+signals. Every signal must carry at least one source, so a downstream
 reviewer (or the Devil's Advocate) can check the work.
 """
 from __future__ import annotations
@@ -20,15 +20,15 @@ Your job: read the provided data bundle and produce a ranked list of bull/bear s
 
 Bundle fields (use all that are non-empty):
   - financial_facts.quarters: SEC XBRL quarterly revenue, net income, EPS, operating income.
-    These are the highest-reliability fundamental signals — compute YoY growth by comparing
+    These are the highest-reliability fundamental signals, compute YoY growth by comparing
     quarters[0] vs quarters[4] (same period prior year). Always build a fundamental signal
     from financial_facts when quarters is non-empty.
   - material_events: SEC 8-K filings with item codes. Key codes to weight heavily:
-      5.02 = officer departure/appointment (CEO/CFO change — HIGH impact)
+      5.02 = officer departure/appointment (CEO/CFO change, HIGH impact)
       4.01 = auditor change (HIGH bearish impact)
       2.06 = material impairment (BEARISH)
       2.01 = acquisition/disposition (directional depends on deal terms)
-      1.01 = material agreement (read description — CHIPS Act, major deal, etc.)
+      1.01 = material agreement (read description, CHIPS Act, major deal, etc.)
   - insider_filings / insider_summary: Form 4 transactions
   - risk_factors: 10-K Item 1A text
   - news_items: recent headlines

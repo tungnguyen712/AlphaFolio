@@ -1,9 +1,12 @@
 import type { ResearchSignal, VerdictLayer } from "@/lib/types";
+import { noEmDash } from "@/lib/text";
 
 interface VerdictCardProps {
   layers: VerdictLayer;
   signal?: ResearchSignal;
   ticker?: string;
+  /** Validation-gate penalty (0..1) already subtracted from layers.confidence; shown as dashed dots. */
+  confidencePenalty?: number;
 }
 
 function signalFromVerdict(verdict: string): ResearchSignal {
@@ -13,98 +16,125 @@ function signalFromVerdict(verdict: string): ResearchSignal {
   return "hold";
 }
 
-const badgeClasses: Record<ResearchSignal, string> = {
-  buy: "bg-emerald-100 text-emerald-800 ring-emerald-200 dark:bg-emerald-950 dark:text-emerald-300 dark:ring-emerald-800",
-  hold: "bg-amber-100 text-amber-800 ring-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:ring-amber-800",
-  sell: "bg-red-100 text-red-800 ring-red-200 dark:bg-red-950 dark:text-red-300 dark:ring-red-800",
+/** The verdict text often starts with the call itself ("HOLD: ..."); the big word already says it. */
+function verdictSentence(verdict: string): string {
+  const rest = verdict.replace(/^(BUY|HOLD|SELL)\s*[:,.\-—]?\s*/i, "") || verdict;
+  return rest.charAt(0).toUpperCase() + rest.slice(1);
+}
+
+const wordClass: Record<ResearchSignal, string> = {
+  buy: "text-buy",
+  hold: "text-hold",
+  sell: "text-sell",
 };
 
-const barClasses: Record<ResearchSignal, string> = {
-  buy: "bg-emerald-500",
-  hold: "bg-amber-500",
-  sell: "bg-red-500",
+const ringClass: Record<ResearchSignal, string> = {
+  buy: "border-buy",
+  hold: "border-hold",
+  sell: "border-sell",
 };
 
-export function VerdictCard({ layers, signal, ticker }: VerdictCardProps) {
+const signalLabel: Record<ResearchSignal, string> = { buy: "Buy", hold: "Hold", sell: "Sell" };
+
+/**
+ * Confidence as 100 dots: filled = confidence, dashed = points removed by the validation gate.
+ * The dots fill in once on load (the page's single orchestrated motion).
+ */
+export function DotGauge({
+  confidence,
+  penalty = 0,
+  signal,
+}: {
+  confidence: number;
+  penalty?: number;
+  signal: ResearchSignal;
+}) {
+  const pct = Math.round(confidence * 100);
+  const penaltyPct = Math.min(Math.round(penalty * 100), 100 - pct);
+  return (
+    <div
+      role="img"
+      aria-label={`Confidence ${pct} out of 100${penaltyPct > 0 ? `, ${penaltyPct} points withheld for data gaps` : ""}`}
+      className="grid w-max grid-cols-10 gap-[5px]"
+    >
+      {Array.from({ length: 100 }).map((_, i) => (
+        <span
+          key={i}
+          style={{ animationDelay: `${i * 7}ms` }}
+          className={`dot-in h-[11px] w-[11px] rounded-full ${
+            i < pct
+              ? "bg-ink"
+              : i < pct + penaltyPct
+                ? `border-2 border-dashed ${ringClass[signal]}`
+                : "bg-rule"
+          }`}
+        />
+      ))}
+    </div>
+  );
+}
+
+export function VerdictCard({ layers, signal, ticker, confidencePenalty = 0 }: VerdictCardProps) {
   const resolvedSignal = signal ?? signalFromVerdict(layers.verdict);
   const confidencePct = Math.round(layers.confidence * 100);
+  const penaltyPct = Math.round(confidencePenalty * 100);
+  const target = layers.entry_price_target ?? layers.exit_price_target;
+  const isEntry = !!layers.entry_price_target;
 
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-900">
-      <div className="flex items-start justify-between gap-6">
-        <div className="flex-1">
-          {ticker && (
-            <p className="mb-1 text-sm font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-              {ticker}
-            </p>
-          )}
-          <div className="flex items-center gap-3">
-            <span
-              className={`inline-flex rounded-full px-4 py-1.5 text-base font-bold ring-1 ring-inset ${badgeClasses[resolvedSignal]}`}
-            >
-              {resolvedSignal.toUpperCase()}
-            </span>
-            <p className="text-lg font-semibold text-zinc-800 dark:text-zinc-100">{layers.verdict}</p>
-          </div>
-        </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <span className="font-mono text-xl font-bold text-zinc-700 dark:text-zinc-200">
-            {confidencePct}%
-          </span>
-          <div className="h-2 w-24 overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
-            <div
-              className={`h-full rounded-full ${barClasses[resolvedSignal]}`}
-              style={{ width: `${confidencePct}%` }}
-            />
-          </div>
-          <span className="text-xs text-zinc-400 dark:text-zinc-500">confidence</span>
-        </div>
-      </div>
-
-      <div className="mt-6 grid gap-4 sm:grid-cols-2">
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-            Top signals
+    <article>
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+        <div className="min-w-0">
+          <p className="text-base text-muted">{ticker ? `${ticker}, the verdict` : "The verdict"}</p>
+          <p className={`font-serif text-verdict font-semibold italic ${wordClass[resolvedSignal]}`}>
+            {signalLabel[resolvedSignal]}
           </p>
-          <ul className="space-y-2">
-            {layers.top_3_signals.map((sig, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-zinc-400 dark:bg-zinc-500" />
-                {sig}
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/40">
-          <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-400">
-            ⚠ Key uncertainty
+          <p className="mt-6 max-w-2xl font-serif text-[1.7rem] leading-[1.2] tracking-tight">
+            {"“"}
+            {noEmDash(verdictSentence(layers.verdict))}
+            {"”"}
           </p>
-          <p className="text-sm text-amber-800 dark:text-amber-200">{layers.key_uncertainty}</p>
         </div>
-      </div>
 
-      {(layers.entry_price_target || layers.exit_price_target) && (() => {
-        const pt = layers.entry_price_target ?? layers.exit_price_target!;
-        const isEntry = !!layers.entry_price_target;
-        return (
-          <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
-            <p className={`mb-1 text-xs font-semibold uppercase tracking-wider ${isEntry ? "text-emerald-700 dark:text-emerald-400" : "text-amber-700 dark:text-amber-400"}`}>
-              {isEntry ? "Entry target" : "Exit target"}
-            </p>
-            <div className="flex items-baseline gap-3">
-              <span className="font-mono text-2xl font-bold text-zinc-800 dark:text-zinc-100">
-                ${pt.price.toFixed(2)}
-              </span>
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">{pt.horizon}</span>
+        <div className="flex flex-col justify-end gap-8">
+          <div className="flex flex-wrap items-center gap-8">
+            <DotGauge confidence={layers.confidence} penalty={confidencePenalty} signal={resolvedSignal} />
+            <div>
+              <p className="font-serif text-3xl font-semibold leading-none">{confidencePct}</p>
+              <p className="mt-1 max-w-[14rem] text-sm text-muted">
+                confidence, out of 100
+                {penaltyPct > 0 && `. Dashed dots are ${penaltyPct} points withheld for data gaps.`}
+              </p>
             </div>
-<p className="mt-2 text-xs font-semibold uppercase tracking-wider text-zinc-400 dark:text-zinc-500">
-              Why this target
-            </p>
-            <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-300">{pt.rationale}</p>
           </div>
-        );
-      })()}
-    </div>
+
+          {target && (
+            <div className="border-l-[3px] border-highlight pl-5">
+              <p className="text-sm text-muted">
+                {isEntry ? "Entry target" : "Exit target"}, {target.horizon}
+              </p>
+              <p className="font-serif text-2xl font-semibold leading-none">${target.price.toFixed(2)}</p>
+              <p className="mt-2 whitespace-pre-wrap text-base text-ink">{noEmDash(target.rationale)}</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <section className="mt-14">
+        <h2 className="mb-5 text-xl font-semibold">What drove it</h2>
+        <div className="grid gap-x-10 gap-y-6 md:grid-cols-3">
+          {layers.top_3_signals.map((sig, i) => (
+            <p key={i} className="border-t-[3px] border-ink pt-4 font-serif text-[1.2rem] leading-[1.35]">
+              {noEmDash(sig)}
+            </p>
+          ))}
+        </div>
+      </section>
+
+      <section className="mt-12 border-y-[3px] border-double border-ink py-7">
+        <h2 className="text-xl font-semibold">Where this could be wrong</h2>
+        <p className="mt-2 max-w-3xl font-serif text-[1.35rem] leading-[1.35]">{noEmDash(layers.key_uncertainty)}</p>
+      </section>
+    </article>
   );
 }

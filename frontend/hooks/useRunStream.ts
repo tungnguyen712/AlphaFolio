@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useGetToken } from "@/hooks/useGetToken";
 import { ApiError, streamRun } from "@/lib/api";
 import type { RunStepOut } from "@/lib/types";
 
@@ -13,7 +13,7 @@ const BASE_RECONNECT_DELAY_MS = 500;
 const MAX_RECONNECT_DELAY_MS = 15_000;
 
 export function useRunStream(runId: string | null) {
-  const { getToken } = useAuth();
+  const getToken = useGetToken();
   const [steps, setSteps] = useState<StreamStep[]>([]);
   const [streamStatus, setStreamStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -8,17 +8,7 @@ import {
   ResponsiveContainer,
   Tooltip,
 } from "recharts";
-
-const PALETTE = [
-  "#0ea5e9", // sky-500
-  "#8b5cf6", // violet-500
-  "#10b981", // emerald-500
-  "#f59e0b", // amber-500
-  "#f43f5e", // rose-500
-  "#6366f1", // indigo-500
-  "#14b8a6", // teal-500
-  "#f97316", // orange-500
-];
+import { chartColor, tooltipStyle } from "@/lib/chartTheme";
 
 interface Slice {
   name: string;
@@ -43,8 +33,8 @@ export function AllocationDonut({ data, totalLabel }: AllocationDonutProps) {
 
   if (data.length === 0) {
     return (
-      <div className="flex h-48 items-center justify-center text-sm text-zinc-400 dark:text-zinc-500">
-        No holdings to chart
+      <div className="flex h-48 items-center justify-center text-base text-muted">
+        Add holdings to see the allocation
       </div>
     );
   }
@@ -58,11 +48,11 @@ export function AllocationDonut({ data, totalLabel }: AllocationDonutProps) {
           cy="50%"
           innerRadius={60}
           outerRadius={90}
-          paddingAngle={2}
+          paddingAngle={1}
           dataKey="value"
         >
           {data.map((_, i) => (
-            <Cell key={i} fill={PALETTE[i % PALETTE.length]} />
+            <Cell key={i} fill={chartColor(i)} stroke="rgb(var(--surface))" />
           ))}
         </Pie>
         <Tooltip
@@ -70,19 +60,13 @@ export function AllocationDonut({ data, totalLabel }: AllocationDonutProps) {
             `${fmt(value as number)} (${fmtPct(value as number, total)})`,
             name as string,
           ]}
-          contentStyle={{
-            borderRadius: "8px",
-            border: "1px solid #3f3f46",
-            backgroundColor: "#18181b",
-            color: "#f4f4f5",
-            fontSize: "12px",
-          }}
+          contentStyle={tooltipStyle}
         />
         <Legend
           iconType="circle"
           iconSize={8}
           formatter={(value) => (
-            <span style={{ fontSize: "12px", color: "#71717a" }}>{value}</span>
+            <span style={{ fontSize: "13px", color: "rgb(var(--muted))" }}>{value}</span>
           )}
         />
         {totalLabel && (
@@ -91,7 +75,7 @@ export function AllocationDonut({ data, totalLabel }: AllocationDonutProps) {
             y="50%"
             textAnchor="middle"
             dominantBaseline="middle"
-            style={{ fontSize: "13px", fontWeight: 600, fill: "#71717a", fontFamily: "monospace" }}
+            style={{ fontSize: "15px", fontWeight: 600, fill: "rgb(var(--ink))" }}
           >
             {totalLabel}
           </text>

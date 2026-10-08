@@ -6,12 +6,12 @@ dicts into typed Pydantic objects. Parsing already happens in the providers
 LLM.
 
 Two branches:
-  - `mode="public"`: ticker-backed — Form 4 + 10-K + Quiver + Polygon.
-  - `mode="pre_ipo"`: company-name-backed — S-1 Risk Factors + Prospectus
+  - `mode="public"`: ticker-backed, Form 4 + 10-K + Quiver + Polygon.
+  - `mode="pre_ipo"`: company-name-backed, S-1 Risk Factors + Prospectus
     Summary. No Form 4 / 10-K / Quiver / Polygon since the company isn't
     public yet; those list fields come back empty and agents flag them.
 
-Haiku tier is reserved for when we add semi-structured extraction here —
+Haiku tier is reserved for when we add semi-structured extraction here,
 e.g. pulling management-commentary bullet points out of a 10-K's MD&A
 section. Until then, no Anthropic call is made.
 """
@@ -99,7 +99,7 @@ async def _safe_10k(ticker: str, as_of: date | None = None) -> dict[str, Any]:
 
 async def _safe_consensus(ticker: str, as_of: date | None) -> ConsensusData | None:
     """Fetch analyst consensus. Always returns None in historical mode because
-    yahooquery has no point-in-time endpoint — surfacing today's consensus
+    yahooquery has no point-in-time endpoint, surfacing today's consensus
     for a past research date would introduce look-ahead bias."""
     if as_of is not None:
         logger.debug("data_retrieval: skipping consensus for historical run (%s as_of %s)", ticker, as_of)
@@ -122,7 +122,7 @@ async def _run_public(inputs: DataRetrievalInput) -> DataRetrievalOutput:
     events_task = _safe_8k_events(ticker, lookback, as_of)
     facts_task = _safe_financial_facts(ticker, as_of)
     consensus_task = asyncio.create_task(_safe_consensus(ticker, as_of))
-    # Quiver stub is fixture-based (not date-aware) — skip in historical mode to
+    # Quiver stub is fixture-based (not date-aware), skip in historical mode to
     # avoid injecting future congressional trades into a point-in-time analysis.
     congress_task = (
         _empty_congress() if as_of is not None else quiver_stub.fetch_congress_trades(ticker)
@@ -205,7 +205,7 @@ async def _run_pre_ipo(inputs: DataRetrievalInput) -> DataRetrievalOutput:
     the absence and Market Intel still delivers Tavily news, so research
     on a truly private company degrades to news-only rather than erroring.
 
-    Form D filings are pulled in parallel — they're public for any company
+    Form D filings are pulled in parallel, they're public for any company
     that's done a private securities offering (which is essentially all
     venture-backed pre-IPOs), and give the most concrete dollar-denominated
     funding-round data available for private names.
@@ -261,11 +261,11 @@ async def _safe_s1(company_name: str) -> dict[str, Any]:
 
 
 async def _safe_form_d(company_name: str) -> list[dict[str, Any]]:
-    """Form D is supplementary — never raise from missing-data on it."""
+    """Form D is supplementary, never raise from missing-data on it."""
     try:
         result = await sec_edgar.fetch_form_d_filings(company_name)
         return list(result.get("filings", []))
-    except (LookupError, Exception):  # noqa: BLE001 — supplementary path
+    except (LookupError, Exception):  # noqa: BLE001, supplementary path
         return []
 
 
@@ -290,7 +290,7 @@ async def _safe_polygon(ticker: str) -> dict[str, Any]:
     except PolygonFixtureMissingError:
         pass
 
-    # No fixture — fetch live prev-close so price_summary.latest is populated.
+    # No fixture, fetch live prev-close so price_summary.latest is populated.
     settings = get_settings()
     price: float | None = None
 

@@ -38,12 +38,30 @@ export function Nav() {
   const [bellOpen, setBellOpen] = useState(false);
 
   const [isDemo, setIsDemo] = useState(false);
-  useEffect(() => { setIsDemo(isDemoMode()); }, []);
+  const [today, setToday] = useState("");
+  useEffect(() => {
+    setIsDemo(isDemoMode());
+    setToday(
+      new Date().toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+    );
+  }, []);
 
-  const isActive = (prefix: string) =>
-    pathname.startsWith(prefix)
-      ? "font-semibold text-sky-600 dark:text-sky-400"
-      : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200";
+  const section = pathname.startsWith("/research")
+    ? "The research desk"
+    : pathname.startsWith("/portfolios")
+      ? "The portfolio desk"
+      : pathname.startsWith("/supply-chain")
+        ? "The supply chain desk"
+        : pathname.startsWith("/simulation")
+          ? "The simulation desk"
+          : "AlphaFolio";
+
+  const tabClass = (prefix: string) =>
+    `shrink-0 whitespace-nowrap border-b-[3px] pb-0.5 text-[1rem] transition-colors ${
+      pathname.startsWith(prefix)
+        ? "border-highlight font-semibold text-ink"
+        : "border-transparent text-muted hover:text-ink"
+    }`;
 
   const handleNotifClick = async (n: NotificationOut) => {
     setBellOpen(false);
@@ -52,48 +70,28 @@ export function Nav() {
   };
 
   return (
-    <nav className="sticky top-0 z-30 border-b border-zinc-200 bg-white/90 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90">
-      <div className="mx-auto flex w-full max-w-7xl min-w-0 items-center justify-between px-6 py-4">
-        <div className="flex min-w-0 items-center gap-8">
-          <Link href="/" className="text-base font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
+    <header className="sticky top-0 z-30 bg-paper/95 backdrop-blur-sm">
+      <div className="mx-auto w-full min-w-0 max-w-content px-4 sm:px-12">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 pt-5">
+          <Link href="/" className="font-serif text-[1.5rem] font-semibold italic leading-none tracking-tight text-ink">
             AlphaFolio
           </Link>
-          <div className="flex items-center gap-6">
-            <Link href="/research" className={`text-sm font-medium transition-colors ${isActive("/research")}`}>
-              Research
-            </Link>
-            <Link
-              href="/portfolios"
-              className={`text-sm font-medium transition-colors ${isActive("/portfolios")}`}
-            >
-              Portfolios
-            </Link>
-            <Link
-              href="/supply-chain"
-              className={`text-sm font-medium transition-colors ${isActive("/supply-chain")}`}
-            >
-              Supply Chain
-            </Link>
-            <Link
-              href="/simulation"
-              className={`text-sm font-medium transition-colors ${isActive("/simulation")}`}
-            >
-              Simulation
-            </Link>
-            <Link
-              href="/settings"
-              className={`text-sm font-medium transition-colors ${isActive("/settings")}`}
-            >
-              Settings
-            </Link>
-          </div>
-        </div>
+          <nav
+            aria-label="Main"
+            className="no-scrollbar order-last flex w-full items-baseline gap-7 overflow-x-auto pb-1 sm:order-none sm:ml-auto sm:w-auto"
+          >
+            <Link href="/research" className={tabClass("/research")}>Research</Link>
+            <Link href="/portfolios" className={tabClass("/portfolios")}>Portfolios</Link>
+            <Link href="/supply-chain" className={tabClass("/supply-chain")}>Supply chain</Link>
+            <Link href="/simulation" className={tabClass("/simulation")}>Simulation</Link>
+            <Link href="/settings" className={tabClass("/settings")}>Settings</Link>
+          </nav>
 
         <div className="flex items-center gap-2">
           <div className="relative">
             <button
               onClick={() => setBellOpen((v) => !v)}
-              className="relative rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
+              className="relative rounded p-1.5 text-muted hover:bg-rule/40 hover:text-ink"
               aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ""}`}
             >
               <svg
@@ -110,26 +108,26 @@ export function Nav() {
                 />
               </svg>
               {unreadCount > 0 && (
-                <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                <span className="absolute right-0 top-0 flex h-4 w-4 items-center justify-center rounded-full bg-sell text-[11px] font-bold text-action-ink">
                   {unreadCount > 9 ? "9+" : unreadCount}
                 </span>
               )}
             </button>
 
             {bellOpen && (
-              <div className="absolute right-0 mt-2 w-80 rounded-xl border border-zinc-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
-                <div className="border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
-                  <p className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Notifications</p>
+              <div className="absolute right-0 mt-2 w-80 rounded-lg border border-rule bg-surface shadow-lg">
+                <div className="border-b border-rule px-4 py-3">
+                  <p className="text-sm font-semibold text-ink">Notifications</p>
                 </div>
-                <ul className="max-h-72 divide-y divide-zinc-100 overflow-y-auto dark:divide-zinc-800">
+                <ul className="max-h-72 divide-y divide-rule overflow-y-auto">
                   {notifications.slice(0, 8).map((n) => (
                     <li key={n.id}>
                       <button
                         onClick={() => void handleNotifClick(n)}
-                        className="w-full px-4 py-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                        className="w-full px-4 py-3 text-left hover:bg-rule/30"
                       >
                         <p
-                          className={`text-sm ${n.read_at ? "text-zinc-500 dark:text-zinc-400" : "font-medium text-zinc-900 dark:text-zinc-100"}`}
+                          className={`text-sm ${n.read_at ? "text-muted" : "font-medium text-ink"}`}
                         >
                           {n.kind === "run_complete"
                             ? "Run completed"
@@ -137,23 +135,23 @@ export function Nav() {
                               ? "Rebalance trigger fired"
                               : "Notification"}
                         </p>
-                        <p className="mt-0.5 font-mono text-xs text-zinc-400 dark:text-zinc-500">
+                        <p className="mt-0.5 text-sm tabular-nums text-muted">
                           {new Date(n.created_at).toLocaleDateString()}
                         </p>
                       </button>
                     </li>
                   ))}
                   {notifications.length === 0 && (
-                    <li className="px-4 py-6 text-center text-sm text-zinc-400 dark:text-zinc-500">
-                      No notifications
+                    <li className="px-4 py-6 text-sm text-muted">
+                      Nothing new. Run or rebalance alerts will show up here.
                     </li>
                   )}
                 </ul>
-                <div className="border-t border-zinc-100 px-4 py-2 dark:border-zinc-800">
+                <div className="border-t border-rule px-4 py-2">
                   <Link
                     href="/notifications"
                     onClick={() => setBellOpen(false)}
-                    className="text-xs text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    className="text-sm text-action hover:underline"
                   >
                     View all
                   </Link>
@@ -164,14 +162,22 @@ export function Nav() {
 
           <ThemeToggle />
           {isDemo ? (
-            <span className="rounded-md bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800 dark:bg-amber-950 dark:text-amber-300">
-              Demo
-            </span>
+            <span className="rounded-sm bg-highlight px-2 py-0.5 text-sm font-semibold text-[#111]">Demo</span>
           ) : (
             <UserButton afterSignOutUrl="/sign-in" />
           )}
         </div>
+        </div>
+
+        <div className="mt-4 border-t-4 border-ink" />
+        <div className="mt-1 border-t border-ink" />
+        <div className="hidden justify-between py-2 text-sm text-muted sm:flex">
+          <span suppressHydrationWarning>{today}</span>
+          <span>{section}</span>
+          <span>{isDemo ? "Demo edition" : ""}</span>
+        </div>
+        <div className="border-t border-ink" />
       </div>
-    </nav>
+    </header>
   );
 }

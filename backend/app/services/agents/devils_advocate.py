@@ -17,7 +17,7 @@ motivated to be right and has blind spots.
 
   - If the signals skew bullish, construct the strongest bear case. Flipped if
     bearish. If genuinely mixed, attack both sides.
-  - Counterarguments must be specific and falsifiable — "management has a
+  - Counterarguments must be specific and falsifiable, "management has a
     history of missing Q4 guidance when channel inventory is above 8 weeks"
     beats "execution risk".
   - Rank by severity honestly. A "low" severity argument is still worth

@@ -6,6 +6,8 @@ import { useNotifications } from "@/hooks/useNotifications";
 import type { NotificationOut } from "@/lib/types";
 import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/Panel";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 function notifHref(n: NotificationOut): string {
   const p = n.payload;
@@ -55,36 +57,39 @@ export default function NotificationsPage() {
   };
 
   if (loading) return <Spinner />;
-  if (error) return <p className="text-sm text-red-600">{error}</p>;
+  if (error) return <ErrorState title="Couldn't load notifications" message={error} />;
 
   return (
     <div>
-      <h2 className="mb-6 text-xl font-bold text-neutral-900 dark:text-zinc-100">Notifications</h2>
+      <PageHeader title="Notifications" description="Finished runs, price alerts, and rebalance triggers." />
       {notifications.length === 0 ? (
-        <EmptyState title="No notifications" description="You're all caught up." />
+        <EmptyState title="Nothing new" description="When a run finishes or a rebalance trigger fires, it will show up here." />
       ) : (
-        <ul className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white shadow-sm dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
+        <ul className="max-w-3xl divide-y divide-rule border-y border-rule">
           {notifications.map((n) => (
             <li key={n.id}>
               <button
                 onClick={() => void handleClick(n)}
                 disabled={readingId === n.id}
-                className="flex w-full items-start justify-between px-6 py-4 text-left hover:bg-neutral-50 disabled:cursor-wait dark:hover:bg-zinc-800/60"
+                className="flex w-full items-start justify-between px-1 py-4 text-left hover:bg-rule/30 disabled:cursor-wait"
               >
-                <div className="space-y-0.5">
+                <div className="flex items-start gap-3">
+                  <span
+                    aria-label={n.read_at ? undefined : "Unread"}
+                    className={`mt-2 h-2 w-2 shrink-0 rounded-full ${n.read_at ? "bg-transparent" : "bg-action"}`}
+                  />
+                  <div className="space-y-0.5">
                   <p
-                    className={`text-sm ${n.read_at ? "text-neutral-500 dark:text-zinc-400" : "font-medium text-neutral-900 dark:text-zinc-100"}`}
+                    className={`text-base ${n.read_at ? "text-muted" : "font-semibold text-ink"}`}
                   >
                     {(n.payload.title as string | undefined) ?? notifLabel(n.kind)}
                   </p>
-                  <p className="text-xs text-neutral-400 dark:text-zinc-500">
+                  <p className="text-sm text-muted">
                     {new Date(n.created_at).toLocaleString()}
                   </p>
-                  {!n.read_at && (
-                    <span className="inline-block h-2 w-2 rounded-full bg-blue-500" />
-                  )}
+                  </div>
                 </div>
-                <span className="ml-4 text-xs text-neutral-400 dark:text-zinc-500">→</span>
+                <span className="ml-4 text-sm text-muted">→</span>
               </button>
             </li>
           ))}

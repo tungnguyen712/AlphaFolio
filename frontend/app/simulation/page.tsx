@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { Spinner } from "@/components/ui/Spinner";
 import { useRunSimulation, useSimulations } from "@/hooks/useSimulation";
 import Link from "next/link";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Button } from "@/components/ui/Button";
 import type { SimPositionIn } from "@/lib/types";
 
 interface PositionRow {
@@ -69,22 +71,21 @@ export default function SimulationPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl px-6 py-10">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">Simulation</h1>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Build a hypothetical portfolio and see how it would have performed vs any benchmark.
-        </p>
-      </div>
+    <div>
+      <PageHeader
+        title="Simulation"
+        description="Build a hypothetical portfolio and see how it would have performed against a benchmark."
+      />
 
+      <div className="max-w-form">
       <form
         onSubmit={(e) => void handleSubmit(e)}
-        className="space-y-6 rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="space-y-6"
       >
         {/* Date range */}
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            <label className="mb-1 block text-sm font-medium text-ink">
               Start date
             </label>
             <input
@@ -92,11 +93,11 @@ export default function SimulationPage() {
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               max={endDate}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              className="w-full rounded border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-action"
             />
           </div>
           <div>
-            <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            <label className="mb-1 block text-sm font-medium text-ink">
               End date
             </label>
             <input
@@ -105,14 +106,14 @@ export default function SimulationPage() {
               onChange={(e) => setEndDate(e.target.value)}
               min={startDate}
               max={today}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+              className="w-full rounded border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-action"
             />
           </div>
         </div>
 
         {/* Benchmark */}
         <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+          <label className="mb-1 block text-sm font-medium text-ink">
             Benchmark ticker
           </label>
           <input
@@ -121,9 +122,9 @@ export default function SimulationPage() {
             onChange={(e) => setBenchmark(e.target.value.toUpperCase())}
             placeholder="VOO"
             maxLength={16}
-            className="w-32 rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-sm uppercase text-zinc-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+            className="w-32 rounded border border-rule bg-surface px-3 py-2 tabular-nums text-sm text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-action"
           />
-          <p className="mt-1 text-xs text-zinc-400 dark:text-zinc-500">
+          <p className="mt-1 text-sm text-muted">
             VOO = S&amp;P 500, QQQ = Nasdaq 100, or any ticker
           </p>
         </div>
@@ -131,11 +132,11 @@ export default function SimulationPage() {
         {/* Positions */}
         <div>
           <div className="mb-2 flex items-center justify-between">
-            <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            <label className="text-sm font-medium text-ink">
               Portfolio positions
             </label>
             <span
-              className={`text-xs font-mono ${weightOk ? "text-emerald-600 dark:text-emerald-400" : "text-amber-600 dark:text-amber-400"}`}
+              className={`text-sm tabular-nums ${weightOk ? "text-buy " : "text-hold "}`}
             >
               {totalWeight.toFixed(1)}% / 100%
             </span>
@@ -149,7 +150,7 @@ export default function SimulationPage() {
                   onChange={(e) => updateRow(i, "ticker", e.target.value)}
                   placeholder="AAPL"
                   maxLength={16}
-                  className="w-28 rounded-lg border border-zinc-300 bg-white px-3 py-2 font-mono text-sm uppercase text-zinc-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  className="w-28 rounded border border-rule bg-surface px-3 py-2 tabular-nums text-sm text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-action"
                 />
                 <input
                   type="number"
@@ -159,14 +160,14 @@ export default function SimulationPage() {
                   min="0.1"
                   max="100"
                   step="0.1"
-                  className="w-24 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100"
+                  className="w-24 rounded border border-rule bg-surface px-3 py-2 text-sm text-ink focus:border-action focus:outline-none focus:ring-1 focus:ring-action"
                 />
-                <span className="text-xs text-zinc-400">%</span>
+                <span className="text-sm text-muted">%</span>
                 {positions.length > 1 && (
                   <button
                     type="button"
                     onClick={() => removeRow(i)}
-                    className="text-xs text-zinc-400 hover:text-red-500"
+                    className="text-sm text-muted hover:text-sell"
                   >
                     ✕
                   </button>
@@ -178,47 +179,43 @@ export default function SimulationPage() {
             <button
               type="button"
               onClick={addRow}
-              className="mt-2 text-xs text-sky-600 hover:text-sky-700 dark:text-sky-400"
+              className="mt-2 text-base text-action hover:underline"
             >
               + Add ticker
             </button>
           )}
           {!weightOk && totalWeight > 0 && (
-            <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+            <p className="mt-1 text-sm text-hold">
               Weights must sum to 100% (currently {totalWeight.toFixed(1)}%)
             </p>
           )}
         </div>
 
-        {error && <p className="text-xs text-red-600 dark:text-red-400">{error}</p>}
+        {error && <p className="text-sm text-sell">{error}</p>}
 
-        <button
-          type="submit"
-          disabled={loading || !weightOk}
-          className="flex items-center gap-2 rounded-lg bg-sky-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-40"
-        >
+        <Button type="submit" size="lg" disabled={loading || !weightOk}>
           {loading && <Spinner size="sm" />}
-          {loading ? "Running simulation…" : "Run simulation"}
-        </button>
+          {loading ? "Running simulation" : "Run simulation"}
+        </Button>
       </form>
 
       {/* Recent simulations */}
       {recent.length > 0 && (
-        <div className="mt-8">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        <div className="mt-12">
+          <h2 className="mb-3 text-xl font-semibold text-ink">
             Recent simulations
           </h2>
-          <ul className="space-y-2">
+          <ul className="border-t border-rule">
             {recent.map((sim) => (
               <li key={sim.id}>
                 <Link
                   href={`/simulation/${sim.id}`}
-                  className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 hover:bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-rule px-1 py-3 hover:bg-rule/30"
                 >
-                  <div className="flex items-center gap-2 font-mono text-sm text-zinc-800 dark:text-zinc-100">
+                  <div className="flex items-center gap-2 tabular-nums text-sm text-ink">
                     {sim.positions.map((p) => `${p.ticker} ${(p.weight * 100).toFixed(0)}%`).join(" · ")}
                   </div>
-                  <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                  <span className="text-sm text-muted">
                     {sim.start_date} → {sim.end_date}
                   </span>
                 </Link>
@@ -227,6 +224,7 @@ export default function SimulationPage() {
           </ul>
         </div>
       )}
-    </main>
+      </div>
+    </div>
   );
 }

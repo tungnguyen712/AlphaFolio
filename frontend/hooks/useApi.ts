@@ -1,19 +1,10 @@
 "use client";
 
-import { useAuth } from "@clerk/nextjs";
 import { useMemo } from "react";
 import { createApiClient } from "@/lib/api";
-import { DEMO_TOKEN, isDemoMode } from "@/lib/demo";
+import { useGetToken } from "@/hooks/useGetToken";
 
 export function useApi() {
-  const { getToken } = useAuth();
-  return useMemo(
-    () =>
-      createApiClient(
-        isDemoMode() && DEMO_TOKEN
-          ? () => Promise.resolve(DEMO_TOKEN)
-          : () => getToken(),
-      ),
-    [getToken],
-  );
+  const getToken = useGetToken();
+  return useMemo(() => createApiClient(getToken), [getToken]);
 }

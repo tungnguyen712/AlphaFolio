@@ -1,6 +1,6 @@
 """Builds a ValuationBridge from structured data already in the pipeline.
 
-Pure Python — no LLM, no network. Assembles current price, available
+Pure Python, no LLM, no network. Assembles current price, available
 multiples, and simple scenario anchors. The Synthesis agent then uses this
 as a structured foundation for its valuation commentary.
 """

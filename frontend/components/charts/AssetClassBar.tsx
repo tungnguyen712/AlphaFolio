@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { axisTick, chartColor, labelStyle, tooltipStyle } from "@/lib/chartTheme";
 
 interface BarItem {
   name: string;
@@ -21,8 +22,8 @@ interface AssetClassBarProps {
 }
 
 const COLOR_MAP: Record<string, string> = {
-  ipo: "#0ea5e9",
-  established: "#10b981",
+  ipo: chartColor(0),
+  established: chartColor(1),
 };
 
 function fmt(v: number) {
@@ -32,8 +33,8 @@ function fmt(v: number) {
 export function AssetClassBar({ data }: AssetClassBarProps) {
   if (data.length === 0) {
     return (
-      <div className="flex h-32 items-center justify-center text-sm text-zinc-400 dark:text-zinc-500">
-        No data
+      <div className="flex h-32 items-center justify-center text-base text-muted">
+        No holdings yet
       </div>
     );
   }
@@ -45,29 +46,23 @@ export function AssetClassBar({ data }: AssetClassBarProps) {
         <YAxis
           type="category"
           dataKey="name"
-          tick={{ fontSize: 12, fill: "#71717a" }}
+          tick={axisTick}
           width={90}
           tickFormatter={(v: string) => v.charAt(0).toUpperCase() + v.slice(1)}
         />
         <Tooltip
           formatter={(v) => [fmt(v as number), "Cost basis"]}
-          contentStyle={{
-            borderRadius: "8px",
-            border: "1px solid #3f3f46",
-            backgroundColor: "#18181b",
-            color: "#f4f4f5",
-            fontSize: "12px",
-          }}
+          contentStyle={tooltipStyle}
         />
         <Bar dataKey="value" radius={[0, 4, 4, 0]}>
           {data.map((entry, i) => (
-            <Cell key={i} fill={COLOR_MAP[entry.name.toLowerCase()] ?? "#6366f1"} />
+            <Cell key={i} fill={COLOR_MAP[entry.name.toLowerCase()] ?? chartColor(3)} />
           ))}
           <LabelList
             dataKey="value"
             position="right"
             formatter={(v: unknown) => fmt(v as number)}
-            style={{ fontSize: "11px", fill: "#71717a", fontFamily: "monospace" }}
+            style={labelStyle}
           />
         </Bar>
       </BarChart>

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { usePortfolios } from "@/hooks/usePortfolios";
 import { useCreatePendingPosition } from "@/hooks/usePortfolios";
 import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
+import { Field, inputClass } from "@/components/ui/Field";
 
 interface AddToPortfolioModalProps {
   reportId: string;
@@ -48,81 +50,73 @@ export function AddToPortfolioModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl dark:bg-zinc-900">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="add-to-portfolio-title"
+        className="w-full max-w-sm rounded-lg border border-rule bg-surface p-6 shadow-xl"
+      >
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-neutral-900 dark:text-zinc-100">Add {ticker} to Portfolio</h2>
-          <button
-            onClick={onClose}
-            className="text-neutral-400 hover:text-neutral-700 dark:text-zinc-500 dark:hover:text-zinc-200"
-            aria-label="Close"
-          >
+          <h2 id="add-to-portfolio-title" className="text-xl font-semibold text-ink">
+            Add {ticker} to a portfolio
+          </h2>
+          <button onClick={onClose} className="rounded p-1 text-muted hover:text-ink" aria-label="Close">
             ✕
           </button>
         </div>
 
         {success ? (
-          <p className="text-sm font-medium text-green-700">
-            Added as pending position. Review it in the Pending tab.
+          <p className="text-base font-medium text-buy">
+            Added as a pending position. Review it on the Pending tab of that portfolio.
           </p>
         ) : (
           <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
-                Portfolio
-              </label>
-              {portfoliosLoading ? (
-                <Spinner size="sm" />
-              ) : (
+            {portfoliosLoading ? (
+              <Spinner size="sm" />
+            ) : (
+              <Field label="Portfolio">
                 <select
                   value={selectedPortfolioId}
                   onChange={(e) => setSelectedPortfolioId(e.target.value)}
                   required
-                  className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-neutral-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                  className={inputClass}
                 >
-                  <option value="">Select a portfolio…</option>
+                  <option value="">Select a portfolio</option>
                   {portfolios.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.name}
                     </option>
                   ))}
                 </select>
-              )}
-            </div>
+              </Field>
+            )}
 
-            <div>
-              <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
-                Target allocation %
-              </label>
+            <Field label="Target allocation (%)">
               <input
                 type="text"
+                inputMode="decimal"
                 value={targetPct}
                 onChange={(e) => setTargetPct(e.target.value)}
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:border-neutral-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+                className={inputClass}
                 placeholder="5"
               />
-            </div>
+            </Field>
 
             {createPending.error && (
-              <p className="text-xs text-red-600">{createPending.error}</p>
+              <p role="alert" className="text-sm text-sell">
+                {createPending.error}
+              </p>
             )}
 
             <div className="flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={onClose}
-                className="rounded-md px-4 py-2 text-sm text-neutral-600 hover:bg-neutral-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
-              >
+              <Button type="button" variant="quiet" onClick={onClose}>
                 Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={createPending.loading || !selectedPortfolioId}
-                className="flex items-center gap-2 rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
-              >
+              </Button>
+              <Button type="submit" disabled={createPending.loading || !selectedPortfolioId}>
                 {createPending.loading && <Spinner size="sm" />}
                 Add to portfolio
-              </button>
+              </Button>
             </div>
           </form>
         )}

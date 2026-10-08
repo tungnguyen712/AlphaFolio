@@ -1,8 +1,12 @@
 import { ClerkProvider } from "@clerk/nextjs";
 import type { Metadata } from "next";
+import { Fraunces, Instrument_Sans } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { Nav } from "@/components/nav/Nav";
+
+const sans = Instrument_Sans({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+const serif = Fraunces({ subsets: ["latin"], style: ["normal", "italic"], variable: "--font-serif", display: "swap" });
 
 export const metadata: Metadata = {
   title: "AlphaFolio",
@@ -12,11 +16,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClerkProvider>
-      <html lang="en" suppressHydrationWarning>
-        <body className="min-h-screen bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
+      <html lang="en" suppressHydrationWarning className={`${sans.variable} ${serif.variable}`}>
+        <body className="min-h-screen bg-paper font-sans text-base text-ink antialiased">
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
             <Nav />
-            <main className="mx-auto w-full max-w-7xl min-w-0 px-6 py-8">{children}</main>
+            <main className="mx-auto w-full min-w-0 max-w-content px-4 pb-24 pt-8 sm:px-12">{children}</main>
           </ThemeProvider>
         </body>
       </html>

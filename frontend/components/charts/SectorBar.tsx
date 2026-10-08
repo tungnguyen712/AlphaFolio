@@ -10,6 +10,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { axisTick, chartColor, labelStyle, tooltipStyle } from "@/lib/chartTheme";
 
 interface BarItem {
   name: string;
@@ -20,11 +21,6 @@ interface SectorBarProps {
   data: BarItem[];
 }
 
-const SECTOR_COLORS = [
-  "#0ea5e9", "#8b5cf6", "#10b981", "#f59e0b",
-  "#f43f5e", "#6366f1", "#14b8a6", "#f97316",
-];
-
 function fmt(v: number) {
   return v.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
@@ -32,8 +28,8 @@ function fmt(v: number) {
 export function SectorBar({ data }: SectorBarProps) {
   if (data.length === 0) {
     return (
-      <div className="flex h-20 items-center justify-center text-xs text-zinc-400 dark:text-zinc-500">
-        Sector data unavailable
+      <div className="flex h-20 items-center justify-center text-base text-muted">
+        The price provider returned no sector for these holdings
       </div>
     );
   }
@@ -45,28 +41,22 @@ export function SectorBar({ data }: SectorBarProps) {
         <YAxis
           type="category"
           dataKey="name"
-          tick={{ fontSize: 11, fill: "#71717a" }}
+          tick={axisTick}
           width={160}
         />
         <Tooltip
           formatter={(v) => [fmt(v as number), "Cost basis"]}
-          contentStyle={{
-            borderRadius: "8px",
-            border: "1px solid #3f3f46",
-            backgroundColor: "#18181b",
-            color: "#f4f4f5",
-            fontSize: "12px",
-          }}
+          contentStyle={tooltipStyle}
         />
         <Bar dataKey="value" radius={[0, 4, 4, 0]}>
           {data.map((_, i) => (
-            <Cell key={i} fill={SECTOR_COLORS[i % SECTOR_COLORS.length]} />
+            <Cell key={i} fill={chartColor(i)} />
           ))}
           <LabelList
             dataKey="value"
             position="right"
             formatter={(v: unknown) => fmt(v as number)}
-            style={{ fontSize: "11px", fill: "#71717a", fontFamily: "monospace" }}
+            style={labelStyle}
           />
         </Bar>
       </BarChart>

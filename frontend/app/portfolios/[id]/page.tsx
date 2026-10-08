@@ -6,24 +6,24 @@ import { usePortfolioMarketData } from "@/hooks/usePortfolioMarketData";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
 import { StatCard } from "@/components/ui/StatCard";
+import { Chip } from "@/components/ui/Chip";
+import { ErrorState } from "@/components/ui/Panel";
 import { CapitalBar } from "@/components/ui/CapitalBar";
 import { AllocationDonut } from "@/components/charts/AllocationDonut";
 import { AssetClassBar } from "@/components/charts/AssetClassBar";
 import { SectorBar } from "@/components/charts/SectorBar";
 import type { AssetClass, RiskProfile } from "@/lib/types";
 
-const riskColors: Record<RiskProfile, string> = {
-  conservative: "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300",
-  moderate: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  aggressive: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
+const riskTone: Record<RiskProfile, "action" | "hold" | "sell"> = {
+  conservative: "action",
+  moderate: "hold",
+  aggressive: "sell",
 };
 
-const ipoStyle = "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-300";
-
-const assetClassColors: Record<AssetClass, string> = {
-  ipo: ipoStyle,
-  established: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300",
-  private: ipoStyle,
+const assetTone: Record<AssetClass, "action" | "buy"> = {
+  ipo: "action",
+  established: "buy",
+  private: "action",
 };
 
 function fmtCompact(n: number) {
@@ -36,12 +36,7 @@ export default function PortfolioOverviewPage({ params }: { params: { id: string
   const { mutate: updatePortfolio } = useUpdatePortfolio(params.id);
 
   if (loading) return <div className="flex justify-center pt-16"><Spinner /></div>;
-  if (error) return (
-    <div className="rounded-xl border border-red-200 bg-red-50 p-5 dark:border-red-900 dark:bg-red-950/40">
-      <p className="text-sm font-semibold text-red-800 dark:text-red-300">Failed to load portfolio</p>
-      <p className="mt-0.5 text-sm text-red-700 dark:text-red-400">{error}</p>
-    </div>
-  );
+  if (error) return <ErrorState title="Couldn't load this portfolio" message={error} onRetry={() => void refetch()} />;
   if (!portfolio) return null;
 
   const cash = parseFloat(portfolio.cash_balance);
@@ -94,38 +89,30 @@ export default function PortfolioOverviewPage({ params }: { params: { id: string
     .sort((a, b) => b[1] - a[1])
     .map(([name, value]) => ({ name, value }));
 
+  const gainTone = gainAbs === null ? "text-ink" : gainAbs >= 0 ? "text-buy" : "text-sell";
+
   return (
-    <div className="space-y-6">
-      {/* Stat row */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="Total Inputs" value={fmtCompact(totalInvested)} />
-        <StatCard
-          label="Money Gained"
-          value={gainAbs !== null ? fmtCompact(gainAbs) : "—"}
-          loading={mktLoading}
-        />
-        <StatCard
-          label="% Gained"
-          value={
-            gainPct !== null
-              ? `${gainPct >= 0 ? "+" : ""}${gainPct.toFixed(2)}%`
-              : "—"
-          }
-          delta={
-            gainPct !== null
-              ? { value: `${Math.abs(gainPct).toFixed(2)}%`, positive: gainPct >= 0 }
-              : undefined
-          }
-          loading={mktLoading}
-        />
-        <StatCard
-          label="Total Value"
-          value={totalValue !== null ? fmtCompact(totalValue) : "—"}
-          loading={mktLoading}
-        />
+    <div className="space-y-10">
+      {/* Header strip: total value first, the rest supports it */}
+      <div className="grid gap-6 sm:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))]">
+        <div>
+          <p className="text-base text-muted">Total value</p>
+          {mktLoading ? (
+            <div className="mt-2 h-12 w-48 animate-pulse rounded bg-rule/60" />
+          ) : (
+            <p className="font-serif text-3xl font-semibold text-ink">{totalValue !== null ? fmtCompact(totalValue) : "n/a"}</p>
+          )}
+          {gainPct !== null && (
+            <p className={`text-lg font-medium ${gainTone}`}>
+              {gainPct >= 0 ? "▲" : "▼"} {Math.abs(gainPct).toFixed(2)}% overall
+            </p>
+          )}
+        </div>
+        <StatCard label="Invested" value={fmtCompact(totalInvested)} />
+        <StatCard label="Gain or loss" value={gainAbs !== null ? fmtCompact(gainAbs) : "n/a"} loading={mktLoading} />
+        <StatCard label="Cash" value={fmtCompact(cash)} />
       </div>
 
-      {/* Capital bar */}
       <CapitalBar
         invested={totalInvested}
         cash={cash}
@@ -135,81 +122,62 @@ export default function PortfolioOverviewPage({ params }: { params: { id: string
         }}
       />
 
-      {/* Charts row */}
       {holdings.length > 0 && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
+        <div className="grid grid-cols-1 gap-10 lg:grid-cols-2">
+          <section>
             <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                Allocation
-              </p>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${riskColors[portfolio.risk_profile]}`}>
-                {portfolio.risk_profile}
-              </span>
+              <h2 className="text-xl font-semibold text-ink">Allocation</h2>
+              <Chip tone={riskTone[portfolio.risk_profile]}>{portfolio.risk_profile}</Chip>
             </div>
             <AllocationDonut
               data={allocationData}
               totalLabel={totalValue !== null ? fmtCompact(totalValue) : undefined}
             />
-          </div>
+          </section>
 
-          <div className="space-y-4">
-            <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                By asset class
-              </p>
+          <div className="space-y-8">
+            <section>
+              <h2 className="mb-2 text-xl font-semibold text-ink">By asset class</h2>
               <AssetClassBar data={assetClassData} />
-            </div>
-
-            <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">
-                By sector
-              </p>
+            </section>
+            <section>
+              <h2 className="mb-2 text-xl font-semibold text-ink">By sector</h2>
               <SectorBar data={sectorData} />
-            </div>
+            </section>
           </div>
         </div>
       )}
 
-      {/* Holdings table */}
-      <div className="rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-900">
-        <div className="flex items-center justify-between border-b border-zinc-100 px-6 py-4 dark:border-zinc-800">
-          <h3 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Holdings</h3>
-          <Link
-            href={`/portfolios/${params.id}/holdings`}
-            className="text-xs text-zinc-400 underline hover:text-zinc-700 dark:text-zinc-500 dark:hover:text-zinc-300"
-          >
-            Manage
+      <section>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-ink">Holdings</h2>
+          <Link href={`/portfolios/${params.id}/holdings`} className="text-base text-action hover:underline">
+            Manage holdings
           </Link>
         </div>
         {holdings.length === 0 ? (
-          <div className="p-6">
-            <EmptyState
-              title="No holdings yet"
-              description="Add holdings in the Holdings tab."
-              icon={
-                <svg className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-                </svg>
-              }
-            />
-          </div>
+          <EmptyState
+            title="No holdings yet"
+            description="Add holdings on the Holdings tab, or research a stock and add it from its report."
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-base">
               <thead>
-                <tr className="border-b border-zinc-100 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
-                  <th className="px-6 py-3 text-left font-medium">Ticker</th>
-                  <th className="px-6 py-3 text-right font-medium">Shares</th>
-                  <th className="px-6 py-3 text-right font-medium">Avg cost</th>
-                  <th className="px-6 py-3 text-right font-medium">Cur. price</th>
-                  <th className="px-6 py-3 text-right font-medium">Value</th>
-                  <th className="px-6 py-3 text-right font-medium">Alloc %</th>
-                  <th className="px-6 py-3 text-left font-medium">Class</th>
-                  <th className="px-6 py-3 text-left font-medium">Research</th>
+                <tr className="border-b border-ink/30 text-sm text-muted">
+                  <th className="py-2 pr-4 text-left font-medium">Ticker</th>
+                  <th className="px-4 py-2 text-right font-medium">Shares</th>
+                  <th className="px-4 py-2 text-right font-medium">Avg cost</th>
+                  <th className="px-4 py-2 text-right font-medium">Price</th>
+                  <th className="px-4 py-2 text-right font-medium">Value</th>
+                  <th className="px-4 py-2 text-right font-medium">Weight</th>
+                  <th className="px-4 py-2 text-left font-medium">Class</th>
+                  <th className="py-2 pl-4 text-right font-medium">
+                    <span className="sr-only">Research</span>
+                  </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-zinc-50 dark:divide-zinc-800/60">
+              <tbody className="divide-y divide-rule">
                 {holdings.map((h) => {
                   const shares = parseFloat(h.shares);
                   const avgCost = parseFloat(h.avg_cost);
@@ -221,64 +189,47 @@ export default function PortfolioOverviewPage({ params }: { params: { id: string
                     curPrice !== null ? ((curPrice - avgCost) / avgCost) * 100 : null;
 
                   return (
-                    <tr key={h.id} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
-                      <td className="px-6 py-3 font-mono font-semibold text-zinc-900 dark:text-zinc-100">
-                        {h.ticker}
-                      </td>
-                      <td className="px-6 py-3 text-right font-mono text-zinc-700 dark:text-zinc-300">
-                        {shares.toLocaleString()}
-                      </td>
-                      <td className="px-6 py-3 text-right font-mono text-zinc-700 dark:text-zinc-300">
-                        ${avgCost.toFixed(2)}
-                      </td>
-                      <td className="px-6 py-3 text-right font-mono text-zinc-700 dark:text-zinc-300">
+                    <tr key={h.id} className="hover:bg-rule/30">
+                      <td className="py-3 pr-4 font-semibold text-ink">{h.ticker}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink">{shares.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink">${avgCost.toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right tabular-nums text-ink">
                         {mktLoading ? (
-                          <span className="inline-block h-4 w-14 animate-pulse rounded bg-zinc-100 dark:bg-zinc-800" />
+                          <span className="inline-block h-4 w-14 animate-pulse rounded bg-rule/60" />
                         ) : curPrice !== null ? (
                           <span>
                             ${curPrice.toFixed(2)}
                             {gainOnHolding !== null && (
-                              <span
-                                className={`ml-1.5 text-xs ${gainOnHolding >= 0 ? "text-emerald-500" : "text-red-500"}`}
-                              >
+                              <span className={`ml-2 text-sm ${gainOnHolding >= 0 ? "text-buy" : "text-sell"}`}>
                                 {gainOnHolding >= 0 ? "▲" : "▼"}
                                 {Math.abs(gainOnHolding).toFixed(1)}%
                               </span>
                             )}
                           </span>
                         ) : (
-                          <span className="text-zinc-400">—</span>
+                          <span className="text-muted">n/a</span>
                         )}
                       </td>
-                      <td className="px-6 py-3 text-right font-mono text-zinc-900 dark:text-zinc-100">
+                      <td className="px-4 py-3 text-right font-medium tabular-nums text-ink">
                         {fmtCompact(holdingValue)}
                       </td>
-                      <td className="px-6 py-3 text-right">
+                      <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
-                          <div className="h-1.5 w-16 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                            <div
-                              className="h-full rounded-full bg-sky-500"
-                              style={{ width: `${Math.min(allocPct, 100)}%` }}
-                            />
+                          <div className="h-1.5 w-16 overflow-hidden rounded-sm bg-rule">
+                            <div className="h-full bg-action" style={{ width: `${Math.min(allocPct, 100)}%` }} />
                           </div>
-                          <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">
-                            {allocPct.toFixed(1)}%
-                          </span>
+                          <span className="w-12 text-right text-sm tabular-nums text-muted">{allocPct.toFixed(1)}%</span>
                         </div>
                       </td>
-                      <td className="px-6 py-3">
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${assetClassColors[h.asset_class]}`}
-                        >
-                          {h.asset_class}
-                        </span>
+                      <td className="px-4 py-3">
+                        <Chip tone={assetTone[h.asset_class]}>{h.asset_class}</Chip>
                       </td>
-                      <td className="px-6 py-3">
+                      <td className="py-3 pl-4 text-right">
                         <Link
                           href={`/research?ticker=${h.ticker}`}
-                          className="text-xs text-sky-500 underline hover:text-sky-600 dark:text-sky-400 dark:hover:text-sky-300"
+                          className="whitespace-nowrap text-action hover:underline"
                         >
-                          Research
+                          Research {h.ticker}
                         </Link>
                       </td>
                     </tr>
@@ -288,7 +239,7 @@ export default function PortfolioOverviewPage({ params }: { params: { id: string
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

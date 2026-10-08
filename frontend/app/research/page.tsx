@@ -9,19 +9,23 @@ import { useRuns } from "@/hooks/useRuns";
 import { useApi } from "@/hooks/useApi";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
+import { Chip } from "@/components/ui/Chip";
+import { Field, inputClass } from "@/components/ui/Field";
+import type { ResearchReportSummary, ResearchSignal } from "@/lib/types";
 
-const signalBadge: Record<string, string> = {
-  buy: "bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300",
-  hold: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950 dark:text-yellow-300",
-  sell: "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300",
+const signalWord: Record<ResearchSignal, string> = { buy: "Buy", hold: "Hold", sell: "Sell" };
+const signalText: Record<ResearchSignal, string> = { buy: "text-buy", hold: "text-hold", sell: "text-sell" };
+
+const statusTone: Record<string, "neutral" | "action" | "buy" | "sell"> = {
+  queued: "neutral",
+  running: "action",
+  complete: "buy",
+  failed: "sell",
 };
 
-const statusBadge: Record<string, string> = {
-  queued: "bg-neutral-100 text-neutral-600 dark:bg-zinc-800 dark:text-zinc-300",
-  running: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  complete: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-  failed: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-};
+const checkboxClass = "h-4 w-4 shrink-0 cursor-pointer accent-[rgb(var(--ink))]";
+const shortDate = (s: string) => new Date(s).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 function ResearchForm() {
   const router = useRouter();
@@ -39,8 +43,6 @@ function ResearchForm() {
   const [navigating, setNavigating] = useState(false);
   const { mutate, loading, error } = useStartResearchRun();
 
-  const today = new Date().toISOString().slice(0, 10);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!ticker.trim()) return;
@@ -57,114 +59,138 @@ function ResearchForm() {
   };
 
   return (
-    <form
-      onSubmit={(e) => void handleSubmit(e)}
-      className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
-    >
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-base font-semibold text-neutral-800 dark:text-zinc-100">Run research</h2>
-        {/* Historical mode toggle */}
-        <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-50 p-0.5 dark:border-zinc-700 dark:bg-zinc-900">
-          {(["Current", "Historical"] as const).map((label) => (
-            <button
-              key={label}
-              type="button"
-              onClick={() => setHistorical(label === "Historical")}
-              className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                (label === "Historical") === historical
-                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100"
-                  : "text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+    <section className="grid grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-10 pb-12 pt-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
+      <h1 className="text-headline font-semibold">
+        Is it <span className="italic">worth holding?</span>
+      </h1>
 
-      {historical && (
-        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-          Historical mode: the AI will research this ticker using data available as of the date below
-          (Finnhub news archive + SEC filings + yfinance prices).
+      <form onSubmit={(e) => void handleSubmit(e)} className="self-end">
+        <label htmlFor="ticker" className="text-base text-muted">
+          Ask about a ticker
+        </label>
+        <input
+          id="ticker"
+          type="text"
+          value={ticker}
+          onChange={(e) => setTicker(e.target.value)}
+          placeholder="AAPL"
+          required
+          autoComplete="off"
+          className="mt-1 w-full border-0 border-b-[3px] border-ink bg-transparent pb-1 font-serif text-[2.5rem] font-semibold uppercase italic leading-tight outline-none placeholder:text-rule focus-visible:outline-none"
+        />
+
+        <div className="mt-5 flex flex-wrap items-end gap-x-5 gap-y-4">
+          <div role="group" aria-label="Research date" className="inline-flex rounded-sm border border-ink">
+            {(["Current", "Historical"] as const).map((label) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={(label === "Historical") === historical}
+                onClick={() => setHistorical(label === "Historical")}
+                className={`px-3 py-1.5 text-sm font-semibold ${
+                  (label === "Historical") === historical ? "bg-ink text-paper" : "text-ink hover:bg-highlight hover:text-[#111]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <Field label="Mode">
+            <select
+              value={mode}
+              onChange={(e) => setMode(e.target.value as "public" | "pre_ipo")}
+              className={`${inputClass} w-auto py-1.5`}
+            >
+              <option value="public">Public</option>
+              <option value="pre_ipo">Pre-IPO</option>
+            </select>
+          </Field>
+
+          {historical ? (
+            <Field label="Research as of">
+              <input
+                type="text"
+                value={dateDisplay}
+                onChange={(e) => {
+                  // strip non-digits, then auto-insert slashes at positions 2 and 4
+                  const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
+                  let formatted = digits;
+                  if (digits.length > 4) formatted = `${digits.slice(0,2)}/${digits.slice(2,4)}/${digits.slice(4)}`;
+                  else if (digits.length > 2) formatted = `${digits.slice(0,2)}/${digits.slice(2)}`;
+                  setDateDisplay(formatted);
+                  const m = formatted.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+                  setAsOfDate(m ? `${m[3]}-${m[2]}-${m[1]}` : "");
+                }}
+                placeholder="DD/MM/YYYY"
+                maxLength={10}
+                required={historical}
+                className={`${inputClass} w-36 py-1.5`}
+              />
+            </Field>
+          ) : (
+            <Field label={`Lookback: ${lookback} days`}>
+              <input
+                type="range"
+                min="7"
+                max="365"
+                value={lookback}
+                onChange={(e) => setLookback(e.target.value)}
+                className="mt-2 w-40 accent-[rgb(var(--ink))]"
+              />
+            </Field>
+          )}
+        </div>
+
+        {historical && (
+          <p className="mt-4 text-sm text-muted">
+            The agents use only data available on that date: Finnhub news archive, SEC filings and yfinance prices.
+          </p>
+        )}
+        {error && (
+          <p role="alert" className="mt-3 text-sm text-sell">
+            {error}
+          </p>
+        )}
+
+        <Button type="submit" size="lg" className="mt-6" disabled={loading || navigating || (historical && !asOfDate)}>
+          {(loading || navigating) && <Spinner size="sm" />}
+          {navigating ? "Starting" : historical ? "Run historical research" : "Start research"}
+        </Button>
+        <p className="mt-3 text-sm text-muted">The agents take about three minutes.</p>
+      </form>
+    </section>
+  );
+}
+
+function SelectBar({
+  title,
+  selectedCount,
+  deleting,
+  onDelete,
+}: {
+  title: string;
+  selectedCount: number;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="flex min-h-10 items-end justify-between border-b-[3px] border-ink pb-2">
+      <h2 className="text-xl font-semibold">{title}</h2>
+      {selectedCount > 0 && (
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted">{selectedCount} selected</span>
+          <Button variant="danger" onClick={onDelete} disabled={deleting} className="h-8 px-3">
+            {deleting ? "Deleting" : "Delete selected"}
+          </Button>
         </div>
       )}
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <div className="sm:col-span-1">
-          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Ticker</label>
-          <input
-            type="text"
-            value={ticker}
-            onChange={(e) => setTicker(e.target.value)}
-            placeholder="e.g. AAPL"
-            required
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm uppercase text-zinc-900 focus:border-neutral-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">Mode</label>
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as "public" | "pre_ipo")}
-            className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-neutral-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-          >
-            <option value="public">Public</option>
-            <option value="pre_ipo">Pre-IPO</option>
-          </select>
-        </div>
-        {historical ? (
-          <div>
-            <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
-              Research as of
-            </label>
-            <input
-              type="text"
-              value={dateDisplay}
-              onChange={(e) => {
-                // strip non-digits, then auto-insert slashes at positions 2 and 4
-                const digits = e.target.value.replace(/\D/g, "").slice(0, 8);
-                let formatted = digits;
-                if (digits.length > 4) formatted = `${digits.slice(0,2)}/${digits.slice(2,4)}/${digits.slice(4)}`;
-                else if (digits.length > 2) formatted = `${digits.slice(0,2)}/${digits.slice(2)}`;
-                setDateDisplay(formatted);
-                const m = formatted.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-                setAsOfDate(m ? `${m[3]}-${m[2]}-${m[1]}` : "");
-              }}
-              placeholder="DD/MM/YYYY"
-              maxLength={10}
-              required={historical}
-              className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-neutral-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-            />
-          </div>
-        ) : (
-          <div>
-            <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
-              Lookback (days): {lookback}
-            </label>
-            <input
-              type="range"
-              min="7"
-              max="365"
-              value={lookback}
-              onChange={(e) => setLookback(e.target.value)}
-              className="mt-2 w-full"
-            />
-          </div>
-        )}
-      </div>
-
-      {error && <p className="mt-3 text-xs text-red-600">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={loading || navigating || (historical && !asOfDate)}
-        className="mt-4 flex items-center gap-2 rounded-md bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50"
-      >
-        {(loading || navigating) && <Spinner size="sm" />}
-        {navigating ? "Starting…" : historical ? "Run historical research" : "Start research"}
-      </button>
-    </form>
+    </div>
   );
+}
+
+function Leader() {
+  return <span className="mx-3 min-w-4 flex-1 border-b-2 border-dotted border-ink/40" aria-hidden />;
 }
 
 function RecentRuns() {
@@ -199,73 +225,48 @@ function RecentRuns() {
   };
 
   return (
-    <div className="mt-8">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-neutral-700 dark:text-zinc-300">Recent runs</h2>
-        {selected.size > 0 && (
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-neutral-500 dark:text-zinc-400">
-              {selected.size} selected
-            </span>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
-          </div>
-        )}
-      </div>
-      <ul className="space-y-2">
+    <section className="mt-12">
+      <SelectBar title="Runs in progress and recent" selectedCount={selected.size} deleting={deleting} onDelete={handleDelete} />
+      <ul>
         {runs.map((run) => (
-          <li key={run.id} className="group flex items-center gap-2">
+          <li key={run.id} className="flex items-center gap-3 border-b border-rule">
             <input
               type="checkbox"
               checked={selected.has(run.id)}
               onChange={() => toggle(run.id)}
-              className="h-4 w-4 cursor-pointer rounded border-neutral-300 text-blue-600 accent-blue-600 dark:border-zinc-600"
+              className={checkboxClass}
+              aria-label={`Select ${run.ticker ?? "run"}`}
             />
-            <Link
-              href={`/research/runs/${run.id}`}
-              className="flex flex-1 items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
-            >
-              <div className="flex items-center gap-3">
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[run.status] ?? "bg-neutral-100 text-neutral-600 dark:bg-zinc-800 dark:text-zinc-300"}`}
-                >
-                  {run.status}
-                </span>
-                <span className="text-sm font-medium text-neutral-800 dark:text-zinc-100">
-                  {run.ticker ?? "—"}
-                </span>
-              </div>
-              <span className="text-xs text-neutral-400 dark:text-zinc-500">
-                {run.started_at ? new Date(run.started_at).toLocaleString() : "—"}
+            <Link href={`/research/runs/${run.id}`} className="flex min-w-0 flex-1 items-baseline py-3 hover:bg-highlight/30">
+              <span className="font-serif text-xl font-semibold">{run.ticker ?? "n/a"}</span>
+              <Leader />
+              <Chip tone={statusTone[run.status] ?? "neutral"}>{run.status}</Chip>
+              <span className="ml-4 hidden w-16 text-right text-sm text-muted sm:inline-block">
+                {run.started_at ? shortDate(run.started_at) : "n/a"}
               </span>
             </Link>
           </li>
         ))}
       </ul>
       {runs.length > 1 && (
-        <button
-          onClick={toggleAll}
-          className="mt-2 text-xs text-neutral-400 hover:text-neutral-600 dark:text-zinc-500 dark:hover:text-zinc-300"
-        >
+        <button onClick={toggleAll} className="mt-3 text-sm text-muted hover:text-ink">
           {selected.size === runs.length ? "Deselect all" : "Select all"}
         </button>
       )}
-    </div>
+    </section>
   );
 }
 
-function RecentReports() {
-  const { data: reports, loading, refetch } = useReports({ limit: 20 });
+function ReportsList({
+  reports,
+  refetch,
+}: {
+  reports: ResearchReportSummary[];
+  refetch: () => Promise<void>;
+}) {
   const api = useApi();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
-
-  if (loading) return <Spinner />;
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -290,75 +291,80 @@ function RecentReports() {
   };
 
   return (
-    <div className="mt-8">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-neutral-700 dark:text-zinc-300">Research reports</h2>
-        {selected.size > 0 && (
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-neutral-500 dark:text-zinc-400">
-              {selected.size} selected
-            </span>
-            <button
-              onClick={handleDelete}
-              disabled={deleting}
-              className="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
-          </div>
+    <section>
+      <SelectBar title="Latest verdicts" selectedCount={selected.size} deleting={deleting} onDelete={handleDelete} />
+      <ul>
+        {reports.map((r) => (
+          <li key={r.id} className="flex items-center gap-3 border-b border-rule">
+            <input
+              type="checkbox"
+              checked={selected.has(r.id)}
+              onChange={() => toggle(r.id)}
+              className={checkboxClass}
+              aria-label={`Select ${r.ticker}`}
+            />
+            <Link href={`/research/reports/${r.id}`} className="flex min-w-0 flex-1 items-baseline py-3.5 hover:bg-highlight/30">
+              <span className="font-serif text-2xl font-semibold tracking-tight">{r.ticker}</span>
+              <Leader />
+              <span className={`mr-5 font-serif text-xl italic ${signalText[r.signal]}`}>{signalWord[r.signal]}</span>
+              <span className="w-9 text-right text-lg font-semibold">{Math.round(r.confidence * 100)}</span>
+              <span className="ml-4 hidden w-16 text-right text-sm text-muted sm:inline-block">{shortDate(r.created_at)}</span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {reports.length > 1 && (
+        <button onClick={toggleAll} className="mt-3 text-sm text-muted hover:text-ink">
+          {selected.size === reports.length ? "Deselect all" : "Select all"}
+        </button>
+      )}
+      <p className="mt-6 text-sm text-muted">Confidence is out of 100. Select a ticker to read the full note.</p>
+    </section>
+  );
+}
+
+function ResearchBody() {
+  const { data: reports, loading, refetch } = useReports({ limit: 20 });
+  const latest = reports[0];
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Spinner />
+      </div>
+    );
+  }
+
+  return (
+    <section className="grid grid-cols-[minmax(0,1fr)] gap-x-16 gap-y-12 border-t-4 border-ink py-12 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+      <div>
+        {latest ? (
+          <>
+            <p className="text-base text-muted">From your latest report, {shortDate(latest.created_at)}</p>
+            <p className={`font-serif text-verdict font-semibold italic ${signalText[latest.signal]}`}>
+              {signalWord[latest.signal]}
+            </p>
+            <p className="mt-6 flex items-baseline gap-4">
+              <span className="font-serif text-3xl font-semibold">{latest.ticker}</span>
+              <span className="text-lg text-muted">confidence {Math.round(latest.confidence * 100)} out of 100</span>
+            </p>
+            <Link href={`/research/reports/${latest.id}`} className="mt-4 inline-block text-lg font-semibold text-action">
+              Read the full note
+            </Link>
+          </>
+        ) : (
+          <EmptyState
+            title="No reports yet"
+            description="Enter a ticker above and start research. Finished reports are filed here, newest first."
+          />
         )}
       </div>
-      {reports.length === 0 ? (
-        <EmptyState
-          title="No reports yet"
-          description="Run research on a ticker to see reports here."
-        />
-      ) : (
-        <>
-          <ul className="space-y-2">
-            {reports.map((r) => (
-              <li key={r.id} className="group flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={selected.has(r.id)}
-                  onChange={() => toggle(r.id)}
-                  className="h-4 w-4 cursor-pointer rounded border-neutral-300 text-blue-600 accent-blue-600 dark:border-zinc-600"
-                />
-                <Link
-                  href={`/research/reports/${r.id}`}
-                  className="flex flex-1 items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
-                >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${signalBadge[r.signal] ?? ""}`}
-                    >
-                      {r.signal.toUpperCase()}
-                    </span>
-                    <span className="text-sm font-medium text-neutral-800 dark:text-zinc-100">{r.ticker}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-xs text-neutral-500 dark:text-zinc-400">
-                      {Math.round(r.confidence * 100)}% confidence
-                    </span>
-                    <span className="text-xs text-neutral-400 dark:text-zinc-500">
-                      {new Date(r.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </Link>
-              </li>
-            ))}
-          </ul>
-          {reports.length > 1 && (
-            <button
-              onClick={toggleAll}
-              className="mt-2 text-xs text-neutral-400 hover:text-neutral-600 dark:text-zinc-500 dark:hover:text-zinc-300"
-            >
-              {selected.size === reports.length ? "Deselect all" : "Select all"}
-            </button>
-          )}
-        </>
-      )}
-    </div>
+
+      <div>
+        {reports.length > 0 && <ReportsList reports={reports} refetch={refetch} />}
+        <RecentRuns />
+      </div>
+    </section>
   );
 }
 
@@ -368,8 +374,7 @@ export default function ResearchPage() {
       <Suspense>
         <ResearchForm />
       </Suspense>
-      <RecentRuns />
-      <RecentReports />
+      <ResearchBody />
     </div>
   );
 }

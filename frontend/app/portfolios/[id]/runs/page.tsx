@@ -10,10 +10,10 @@ import { Spinner } from "@/components/ui/Spinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 const statusBadge: Record<string, string> = {
-  queued: "bg-neutral-100 text-neutral-600 dark:bg-zinc-800 dark:text-zinc-300",
-  running: "bg-blue-100 text-blue-700",
-  complete: "bg-green-100 text-green-700",
-  failed: "bg-red-100 text-red-700",
+  queued: "bg-rule/60 text-ink",
+  running: "bg-action/10 text-action",
+  complete: "bg-buy-soft text-buy",
+  failed: "bg-sell-soft text-sell",
 };
 
 export default function PortfolioRunsPage({ params }: { params: { id: string } }) {
@@ -50,13 +50,13 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
     <div className="space-y-6">
       <form
         onSubmit={(e) => void handleStart(e)}
-        className="rounded-xl border border-neutral-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900"
+        className="rounded-lg border border-rule bg-surface p-6"
       >
-        <h3 className="mb-4 text-sm font-semibold text-neutral-800 dark:text-zinc-100">Run portfolio analysis</h3>
+        <h3 className="mb-4 text-xl font-semibold text-ink">Run portfolio analysis</h3>
 
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
+            <label className="mb-1 block text-sm font-medium text-ink">
               Objective (optional)
             </label>
             <textarea
@@ -64,14 +64,14 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
               onChange={(e) => setObjective(e.target.value)}
               rows={2}
               maxLength={500}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm text-zinc-900 focus:border-neutral-500 focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              className="w-full rounded border border-rule px-3 py-2 text-sm text-ink focus:border-rule focus:outline-none"
               placeholder="e.g. Reduce tech concentration, target 15% cash"
             />
           </div>
 
           {reports.length > 0 && (
             <div>
-              <label className="mb-2 block text-xs font-medium text-neutral-600 dark:text-zinc-400">
+              <label className="mb-2 block text-sm font-medium text-ink">
                 Include research reports (optional)
               </label>
               <div className="grid gap-2 sm:grid-cols-2">
@@ -83,8 +83,8 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
                       onChange={() => toggleReport(r.id)}
                       className="rounded"
                     />
-                    <span className="text-sm text-neutral-700 dark:text-zinc-300">
-                      {r.ticker} — {r.signal.toUpperCase()} ({Math.round(r.confidence * 100)}%)
+                    <span className="text-sm text-ink">
+                      {r.ticker}: {r.signal.toUpperCase()} ({Math.round(r.confidence * 100)}%)
                     </span>
                   </label>
                 ))}
@@ -93,12 +93,12 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
           )}
         </div>
 
-        {startError && <p className="mt-2 text-xs text-red-600">{startError}</p>}
+        {startError && <p className="mt-2 text-sm text-sell">{startError}</p>}
 
         <button
           type="submit"
           disabled={starting || navigating}
-          className="mt-4 flex items-center gap-2 rounded-md bg-neutral-900 px-5 py-2 text-sm font-medium text-white hover:bg-neutral-700 disabled:opacity-50 dark:bg-zinc-700 dark:hover:bg-zinc-600"
+          className="mt-4 flex items-center gap-2 rounded bg-action px-5 py-2 text-sm font-medium text-action-ink hover:opacity-90 disabled:opacity-50"
         >
           {(starting || navigating) && <Spinner size="sm" />}
           {navigating ? "Starting…" : "Start rebalance analysis"}
@@ -106,7 +106,7 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
       </form>
 
       <div>
-        <h3 className="mb-3 text-sm font-semibold text-neutral-800 dark:text-zinc-100">Run history</h3>
+        <h3 className="mb-3 text-xl font-semibold text-ink">Run history</h3>
         {runsLoading ? (
           <Spinner />
         ) : portfolioRuns.length === 0 ? (
@@ -117,18 +117,18 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
               <li key={run.id}>
                 <Link
                   href={`/portfolios/${params.id}/runs/${run.id}`}
-                  className="flex items-center justify-between rounded-lg border border-neutral-200 bg-white px-4 py-3 hover:bg-neutral-50 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800/60"
+                  className="flex items-center justify-between rounded-lg border border-rule bg-surface px-4 py-3 hover:bg-rule/30"
                 >
                   <div className="flex items-center gap-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${statusBadge[run.status] ?? ""}`}
+                      className={`rounded-full px-2 py-0.5 text-sm font-medium ${statusBadge[run.status] ?? ""}`}
                     >
                       {run.status}
                     </span>
-                    <span className="text-sm text-neutral-700 dark:text-zinc-300">Portfolio run</span>
+                    <span className="text-sm text-ink">Portfolio run</span>
                   </div>
-                  <span className="text-xs text-neutral-400 dark:text-zinc-500">
-                    {run.started_at ? new Date(run.started_at).toLocaleString() : "—"}
+                  <span className="text-sm text-muted">
+                    {run.started_at ? new Date(run.started_at).toLocaleString() : "n/a"}
                   </span>
                 </Link>
               </li>

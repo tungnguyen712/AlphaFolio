@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { usePortfolio, useDeletePortfolio } from "@/hooks/usePortfolios";
 import { Spinner } from "@/components/ui/Spinner";
+import { Button } from "@/components/ui/Button";
 
 const tabs = [
   { label: "Overview", suffix: "" },
@@ -28,30 +29,28 @@ function DeletePortfolioModal({
   loading: boolean;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl dark:bg-zinc-900">
-        <h2 className="text-lg font-bold text-neutral-900 dark:text-zinc-100">Delete portfolio?</h2>
-        <p className="mt-2 text-sm text-neutral-600 dark:text-zinc-300">
-          You are about to permanently delete{" "}
-          <span className="font-semibold text-neutral-900 dark:text-zinc-100">{name}</span>. This will remove all
-          holdings, recommendations, pending positions, and triggers. This action cannot be undone.
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="delete-portfolio-title"
+        className="w-full max-w-md rounded-lg border border-rule bg-surface p-6 shadow-xl"
+      >
+        <h2 id="delete-portfolio-title" className="text-xl font-semibold text-ink">
+          Delete this portfolio?
+        </h2>
+        <p className="mt-2 text-base text-ink">
+          <span className="font-semibold">{name}</span> and all of its holdings, recommendations, pending positions,
+          and triggers will be permanently deleted. This can&apos;t be undone.
         </p>
         <div className="mt-6 flex justify-end gap-3">
-          <button
-            onClick={onCancel}
-            disabled={loading}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="flex items-center gap-2 rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
-          >
+          <Button variant="secondary" onClick={onCancel} disabled={loading}>
+            Keep portfolio
+          </Button>
+          <Button variant="danger" onClick={onConfirm} disabled={loading}>
             {loading && <Spinner size="sm" />}
             Delete permanently
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -88,38 +87,30 @@ export default function PortfolioLayout({
         />
       )}
 
-      <div className="mb-4 flex items-start justify-between">
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Link href="/portfolios" className="text-xs text-neutral-400 hover:text-neutral-600 dark:text-zinc-500 dark:hover:text-zinc-300">
-            ← All portfolios
+          <Link href="/portfolios" className="text-base text-muted hover:text-ink">
+            ← Portfolios
           </Link>
-          <h2 className="mt-1 text-xl font-bold text-neutral-900 dark:text-zinc-100">
-            {portfolio?.name ?? "Portfolio"}
-          </h2>
+          <h1 className="mt-1 text-3xl font-semibold text-ink">{portfolio?.name ?? "Portfolio"}</h1>
         </div>
-        <button
-          onClick={() => setShowDeleteModal(true)}
-          className="mt-1 rounded-md border border-red-200 px-3 py-1.5 text-xs font-medium text-red-500 hover:border-red-400 hover:bg-red-50 hover:text-red-700"
-        >
+        <Button variant="quiet" className="!px-0 text-sell hover:text-sell" onClick={() => setShowDeleteModal(true)}>
           Delete portfolio
-        </button>
+        </Button>
       </div>
 
-      <nav className="mb-6 flex gap-1 border-b border-neutral-200 dark:border-zinc-800">
+      <nav aria-label="Portfolio sections" className="no-scrollbar mb-10 flex gap-7 overflow-x-auto border-b border-ink">
         {tabs.map((tab) => {
           const href = `${base}${tab.suffix}`;
           const isActive =
-            tab.suffix === ""
-              ? pathname === base
-              : pathname.startsWith(`${base}${tab.suffix}`);
+            tab.suffix === "" ? pathname === base : pathname.startsWith(`${base}${tab.suffix}`);
           return (
             <Link
               key={tab.suffix}
               href={href}
-              className={`px-4 py-2 text-sm transition-colors ${
-                isActive
-                  ? "border-b-2 border-neutral-900 font-semibold text-neutral-900 dark:border-zinc-100 dark:text-zinc-100"
-                  : "text-neutral-500 hover:text-neutral-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+              aria-current={isActive ? "page" : undefined}
+              className={`-mb-px shrink-0 whitespace-nowrap border-b-[3px] py-3 text-base ${
+                isActive ? "border-highlight font-semibold text-ink" : "border-transparent text-muted hover:text-ink"
               }`}
             >
               {tab.label}

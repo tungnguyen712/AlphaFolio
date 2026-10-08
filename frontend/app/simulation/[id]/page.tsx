@@ -15,30 +15,30 @@ export default function SimulationResultPage() {
 
   if (loading) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-12">
+      <div>
         <div className="flex flex-col items-center gap-4 py-20 text-center">
           <Spinner />
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Loading simulation…</p>
+          <p className="text-base text-muted">Loading simulation</p>
         </div>
-      </main>
+      </div>
     );
   }
 
   if (error || !data) {
     return (
-      <main className="mx-auto max-w-5xl px-6 py-12">
-        <div className="rounded-xl border border-red-200 bg-red-50 px-6 py-4 dark:border-red-900 dark:bg-red-950/30">
-          <p className="text-sm font-medium text-red-700 dark:text-red-400">
+      <div>
+        <div className="rounded-lg border border-sell/40 bg-sell-soft px-6 py-4">
+          <p className="text-sm font-medium text-sell">
             {error ?? "Simulation not found"}
           </p>
         </div>
         <button
           onClick={() => router.push("/simulation")}
-          className="mt-4 text-sm text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="mt-4 text-base text-action hover:underline"
         >
-          ← New simulation
+          New simulation
         </button>
-      </main>
+      </div>
     );
   }
 
@@ -46,21 +46,21 @@ export default function SimulationResultPage() {
   const hasMetrics = data.metrics && Object.keys(data.metrics).length > 0;
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
+    <div>
       {/* Header */}
       <div className="mb-6 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-bold text-zinc-900 dark:text-zinc-100">Simulation result</h1>
-          <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">
-            {data.start_date} → {data.end_date} · benchmark:{" "}
-            <span className="font-mono">{data.benchmark}</span>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">Simulation result</h1>
+          <p className="mt-0.5 text-base text-muted">
+            {data.start_date} to {data.end_date}, benchmark:{" "}
+            <span className="tabular-nums">{data.benchmark}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {data.positions.map((p) => (
             <span
               key={p.ticker}
-              className="rounded-full border border-zinc-200 bg-zinc-50 px-2.5 py-0.5 font-mono text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400"
+              className="rounded bg-rule/60 px-2.5 py-0.5 tabular-nums text-sm text-ink"
             >
               {p.ticker} {(p.weight * 100).toFixed(0)}%
             </span>
@@ -70,8 +70,8 @@ export default function SimulationResultPage() {
 
       {/* Chart */}
       {hasSeries ? (
-        <div className="mb-6 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
-          <p className="mb-3 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+        <div className="mb-10">
+          <p className="mb-3 text-base font-medium text-muted">
             Cumulative % return from start date
           </p>
           <MultiLineReturnChart
@@ -81,15 +81,15 @@ export default function SimulationResultPage() {
           />
         </div>
       ) : (
-        <div className="mb-6 rounded-xl border border-zinc-200 bg-zinc-50 px-6 py-8 text-center text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-          No price data available for the selected date range.
+        <div className="mb-10 rounded-lg border border-dashed border-rule px-6 py-10 text-base text-muted">
+          No price data is available for this date range. Try a later start date.
         </div>
       )}
 
       {/* Metrics table */}
       {hasMetrics && (
-        <div className="mb-6">
-          <h2 className="mb-3 text-sm font-semibold text-zinc-700 dark:text-zinc-300">
+        <div className="mb-10">
+          <h2 className="mb-3 text-xl font-semibold text-ink">
             Performance metrics
           </h2>
           <SimMetricsTable
@@ -101,8 +101,8 @@ export default function SimulationResultPage() {
       )}
 
       {/* Cross-links: Research each ticker as of start_date */}
-      <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900">
-        <p className="mb-3 text-xs font-medium text-zinc-600 dark:text-zinc-400">
+      <div className="border-t border-rule pt-6">
+        <p className="mb-3 text-lg font-semibold text-ink">
           Research these tickers historically (as of {data.start_date})
         </p>
         <div className="flex flex-wrap gap-2">
@@ -110,9 +110,9 @@ export default function SimulationResultPage() {
             <Link
               key={p.ticker}
               href={`/research?ticker=${p.ticker}&as_of_date=${data.start_date}`}
-              className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 hover:border-sky-400 hover:text-sky-700 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-300 dark:hover:border-sky-600 dark:hover:text-sky-400"
+              className="rounded border border-rule bg-surface px-3 py-1.5 text-sm font-medium text-ink hover:border-action hover:text-action"
             >
-              Research {p.ticker} →
+              Research {p.ticker}
             </Link>
           ))}
         </div>
@@ -121,11 +121,11 @@ export default function SimulationResultPage() {
       <div className="mt-6">
         <Link
           href="/simulation"
-          className="text-sm text-zinc-500 underline hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+          className="text-base text-action hover:underline"
         >
-          ← New simulation
+          New simulation
         </Link>
       </div>
-    </main>
+    </div>
   );
 }

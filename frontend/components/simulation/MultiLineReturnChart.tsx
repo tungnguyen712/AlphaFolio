@@ -10,16 +10,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { axisTick, CHART_COLORS, tooltipStyle } from "@/lib/chartTheme";
 import type { SimDailyPoint } from "@/lib/types";
 
-const COLORS = [
-  "#10b981", // emerald
-  "#3b82f6", // blue
-  "#f59e0b", // amber
-  "#8b5cf6", // violet
-  "#f43f5e", // rose
-  "#06b6d4", // cyan
-];
+const COLORS = CHART_COLORS;
 
 interface Props {
   series: Record<string, SimDailyPoint[]>;
@@ -76,36 +70,31 @@ export function MultiLineReturnChart({ series, benchmark, portfolioSeries }: Pro
       <LineChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
         <XAxis
           dataKey="date"
-          tick={{ fontSize: 11, fill: "#71717a" }}
+          tick={axisTick}
           tickLine={false}
           axisLine={false}
           interval="preserveStartEnd"
         />
         <YAxis
           tickFormatter={formatPct}
-          tick={{ fontSize: 11, fill: "#71717a" }}
+          tick={axisTick}
           tickLine={false}
           axisLine={false}
           width={64}
         />
         <Tooltip
           formatter={(value, name) => [formatPct(value as number), name as string]}
-          contentStyle={{
-            background: "var(--tooltip-bg, #fff)",
-            border: "1px solid #e4e4e7",
-            borderRadius: 8,
-            fontSize: 12,
-          }}
+          contentStyle={tooltipStyle}
         />
-        <Legend wrapperStyle={{ fontSize: 12, paddingTop: 12 }} />
-        <ReferenceLine y={0} stroke="#d4d4d8" strokeDasharray="4 2" />
+        <Legend wrapperStyle={{ fontSize: 13, paddingTop: 12 }} />
+        <ReferenceLine y={0} stroke="rgb(var(--muted))" strokeDasharray="4 2" />
 
         {allKeys.map((key, i) => (
           <Line
             key={key}
             type="monotone"
             dataKey={key}
-            stroke={key === "Portfolio" ? "#1d4ed8" : COLORS[i % COLORS.length]}
+            stroke={key === "Portfolio" ? "rgb(var(--ink))" : COLORS[i % COLORS.length]}
             strokeWidth={key === "Portfolio" ? 2.5 : key === benchmark ? 2 : 1.5}
             strokeDasharray={key === "Portfolio" ? "6 3" : undefined}
             dot={false}
