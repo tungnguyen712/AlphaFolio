@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { SENTENCE_RE, findCitations } from "@/lib/citations";
-import { SECTION_ORDER } from "@/lib/rationale";
+import { DISPLAY_SECTIONS } from "@/lib/rationale";
 import type { SourceRef } from "@/lib/types";
 import { noEmDash } from "@/lib/text";
 
@@ -75,8 +75,10 @@ function Citations({ text, news }: { text: string; news: SourceRef[] }) {
   return (
     <>
       {cited.map((n) => (
-        <sup key={n} className="ml-0.5 select-none text-[11px] font-semibold text-ink">
-          [{n}]
+        <sup key={n} className="ml-0.5 text-[11px] font-semibold">
+          <a href={`#source-${n}`} className="text-ink no-underline hover:underline" aria-label={`Source ${n}`}>
+            [{n}]
+          </a>
         </sup>
       ))}
     </>
@@ -96,9 +98,10 @@ export function ReportSections({
   sources: SourceRef[];
 }): ReactNode {
   const news = sources.filter((s) => s.kind === "news");
-  const known = SECTION_ORDER.filter((h) => h in sections);
-  const extras = Object.keys(sections).filter((h) => !(SECTION_ORDER as readonly string[]).includes(h));
-  const keys = [...known, ...extras];
+  // Show only the reader-facing sections. Plain-prose reports (no known headings) are shown whole.
+  const filtered = Object.keys(DISPLAY_SECTIONS).filter((h) => h in sections);
+  const keys = filtered.length > 0 ? filtered : Object.keys(sections);
+  const labelFor = (h: string) => (filtered.length > 0 ? DISPLAY_SECTIONS[h] : h);
 
   return (
     <div className="space-y-9">
@@ -108,7 +111,7 @@ export function ReportSections({
         const blocks = withBoldLead(toBlocks(clean), clean);
         return (
           <section key={heading || "body"}>
-            {heading && <h3 className="mb-3 font-serif text-[1.35rem] font-semibold not-italic text-ink">{heading}</h3>}
+            {heading && <h3 className="mb-3 font-serif text-[1.35rem] font-semibold not-italic text-ink">{labelFor(heading)}</h3>}
             <div className="space-y-4">
               {blocks.map((b, i) =>
                 b.kind === "p" ? (

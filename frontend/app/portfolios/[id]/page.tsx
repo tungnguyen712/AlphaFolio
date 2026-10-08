@@ -100,7 +100,10 @@ export default function PortfolioOverviewPage({ params }: { params: { id: string
           {mktLoading ? (
             <div className="mt-2 h-12 w-48 animate-pulse rounded bg-rule/60" />
           ) : (
-            <p className="font-serif text-3xl font-semibold text-ink">{totalValue !== null ? fmtCompact(totalValue) : "n/a"}</p>
+            <p className="font-serif text-3xl font-semibold text-ink">{fmtCompact(totalValue ?? totalInvested + cash)}</p>
+          )}
+          {totalValue === null && !mktLoading && (
+            <p className="mt-1 max-w-[16rem] text-base text-muted">Based on what you paid. Live prices are unavailable right now.</p>
           )}
           {gainPct !== null && (
             <p className={`text-lg font-medium ${gainTone}`}>
@@ -109,7 +112,7 @@ export default function PortfolioOverviewPage({ params }: { params: { id: string
           )}
         </div>
         <StatCard label="Invested" value={fmtCompact(totalInvested)} />
-        <StatCard label="Gain or loss" value={gainAbs !== null ? fmtCompact(gainAbs) : "n/a"} loading={mktLoading} />
+        <StatCard label="Gain or loss" value={gainAbs !== null ? fmtCompact(gainAbs) : null} emptyText="Shown once live prices load" loading={mktLoading} />
         <StatCard label="Cash" value={fmtCompact(cash)} />
       </div>
 
@@ -207,7 +210,7 @@ export default function PortfolioOverviewPage({ params }: { params: { id: string
                             )}
                           </span>
                         ) : (
-                          <span className="text-muted">n/a</span>
+                          <span className="text-sm text-muted" title="The price provider returned no price for this ticker">No live price</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right font-medium tabular-nums text-ink">

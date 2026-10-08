@@ -120,10 +120,11 @@ These are live in production and must be preserved. Do not revert.
 - Lists `missing_fields` (market_cap, forward_pe, ev_revenue, 52w range) explicitly
 
 **Report sections** (`app/services/agents/synthesis.py`):
-- Rationale format: `N. Section Name: content...` (numbered inline, one paragraph per section)
+- Rationale format: `N. Section Name: content...` (numbered inline; the numbers are a machine format and are never shown to users). Each section opens with a **bold lead** (1 to 2 key sentences a reader can stop at), then short paragraphs and `- ` bullets.
 - `_parse_rationale_sections()` extracts → `SynthesisOutput.report_sections: dict[str, str]`
-- 8 canonical headings in `SECTION_HEADINGS` constant in `app/models/agents/synthesis.py`
-- Frontend uses `ReportSectionsRenderer` when `report_sections` present; `RationaleText` fallback for old reports
+- 3 canonical headings in `SECTION_HEADINGS` (`app/models/agents/synthesis.py`): Recommendation, Investment Thesis, Devil's Advocate. Older reports hold 8; the frontend (`DISPLAY_SECTIONS` in `lib/rationale.ts`) shows only these 3 so stored reports render the same way.
+- Reader rule: the Synthesis prompt forbids internal field names, validation warnings and data-retrieval details in user-facing text. Missing data is mentioned only when it changes the conclusion, in plain words.
+- Frontend: `ReportView` (`components/research/`) renders every research result: verdict block ("What drove it", "Watch out for"), `ReportSections` analysis beside `ByTheNumbers`, and `SourcesSection` last. Never print raw "n/a": omit the item or say why in a plain sentence.
 
 **Analyst Consensus Layer** (`app/services/data_providers/yahoo_consensus.py`, added 2026-05):
 - `fetch_consensus(ticker) -> ConsensusData | None` via yahooquery (sync, runs in executor)

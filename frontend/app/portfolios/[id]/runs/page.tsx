@@ -127,9 +127,9 @@ export default function PortfolioRunsPage({ params }: { params: { id: string } }
                     </span>
                     <span className="text-sm text-ink">Portfolio run</span>
                   </div>
-                  <span className="text-sm text-muted">
-                    {run.started_at ? new Date(run.started_at).toLocaleString() : "n/a"}
-                  </span>
+                  {run.started_at && (
+                    <span className="text-sm text-muted">{new Date(run.started_at).toLocaleString()}</span>
+                  )}
                 </Link>
               </li>
             ))}

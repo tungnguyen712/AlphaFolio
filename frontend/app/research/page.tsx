@@ -238,11 +238,11 @@ function RecentRuns() {
               aria-label={`Select ${run.ticker ?? "run"}`}
             />
             <Link href={`/research/runs/${run.id}`} className="flex min-w-0 flex-1 items-baseline py-3 hover:bg-highlight/30">
-              <span className="font-serif text-xl font-semibold">{run.ticker ?? "n/a"}</span>
+              <span className="font-serif text-xl font-semibold">{run.ticker ?? "Run"}</span>
               <Leader />
               <Chip tone={statusTone[run.status] ?? "neutral"}>{run.status}</Chip>
               <span className="ml-4 hidden w-16 text-right text-sm text-muted sm:inline-block">
-                {run.started_at ? shortDate(run.started_at) : "n/a"}
+                {run.started_at ? shortDate(run.started_at) : ""}
               </span>
             </Link>
           </li>

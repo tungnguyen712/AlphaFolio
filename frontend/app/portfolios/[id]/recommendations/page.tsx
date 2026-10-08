@@ -46,7 +46,7 @@ export default function RecommendationsPage({ params }: { params: { id: string }
                   <span
                     className={`rounded-full px-2 py-0.5 text-sm font-semibold ${verdictSignal(rec.recommendation.layers.verdict)}`}
                   >
-                    {rec.recommendation.layers.verdict.split(" ")[0]?.toUpperCase() ?? "n/a"}
+                    {rec.recommendation.layers.verdict.split(" ")[0]?.toUpperCase()}
                   </span>
                   <span className="text-sm text-ink line-clamp-1">
                     {rec.recommendation.layers.verdict}

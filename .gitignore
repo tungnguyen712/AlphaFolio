@@ -49,3 +49,7 @@ build/
 .claude/
 CLAUDE.MD
 *.tsbuildinfo
+
+# Local tooling and runtime state
+.playwright-mcp/
+celerybeat-schedule*

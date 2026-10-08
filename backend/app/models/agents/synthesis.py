@@ -9,7 +9,9 @@ from __future__ import annotations
 from datetime import date
 from typing import Literal
 
-from pydantic import Field
+from typing import Any
+
+from pydantic import Field, model_validator
 
 from app.models.agents.common import AgentModel, InsiderSummary, SourceRef, VerdictLayer
 from app.models.agents.devils_advocate import DevilsAdvocateOutput
@@ -18,15 +20,12 @@ from app.models.agents.signal_analysis import SignalAnalysisOutput
 from app.models.db.enums import ResearchSignal
 
 
+# The reader-facing analysis has three sections. Reports saved before this change carry the older
+# eight; the frontend only displays the three below.
 SECTION_HEADINGS: list[str] = [
     "Recommendation",
     "Investment Thesis",
-    "Top Signals",
-    "Valuation Bridge",
-    "Key Uncertainties",
     "Devil's Advocate",
-    "Data Quality",
-    "Final Rationale",
 ]
 
 
@@ -104,6 +103,25 @@ class SynthesisOutput(AgentModel):
     signal: ResearchSignal
     layers: VerdictLayer
     rationale: str = Field(description="Multi-paragraph narrative, renders below the VerdictCard.")
+
+    @model_validator(mode="before")
+    @classmethod
+    def _fill_missing_confidence(cls, data: Any) -> Any:
+        """The prompt makes layers.confidence and confidence_breakdown.final_score the same number.
+        If the model drops the first, recover it from the second rather than failing the run."""
+        if not isinstance(data, dict):
+            return data
+        layers = data.get("layers")
+        breakdown = data.get("confidence_breakdown")
+        if (
+            isinstance(layers, dict)
+            and layers.get("confidence") is None
+            and isinstance(breakdown, dict)
+            and isinstance(breakdown.get("final_score"), (int, float))
+        ):
+            return {**data, "layers": {**layers, "confidence": breakdown["final_score"]}}
+        return data
+
     recommended_position_pct: float | None = Field(
         default=None,
         ge=0.0,

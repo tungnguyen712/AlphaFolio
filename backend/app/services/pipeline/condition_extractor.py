@@ -7,7 +7,7 @@ Two layers:
     • Live run (no as_of_date)   → EARNINGS_DATE trigger via yfinance calendar
 
   Layer B (Haiku, one call per report):
-    • Parses key_uncertainty + "Key Uncertainties" section text
+    • Parses key_uncertainty + the Recommendation / Investment Thesis sections (and "Key Uncertainties" in older reports)
     • Outputs a list of watch conditions with optional date or offset_days
     • Date found     → CUSTOM trigger with fires_at set
     • No date found  → CUSTOM trigger fires_at = now + offset_days (default 30)
@@ -241,6 +241,9 @@ async def _layer_b(
     text_parts = [
         f"key_uncertainty: {synth.layers.key_uncertainty}",
     ]
+    # "Recommendation" now ends with what would change the call; "Key Uncertainties" exists in older reports.
+    if rec := sections.get("Recommendation"):
+        text_parts.append(f"Recommendation section: {rec}")
     if key_unc := sections.get("Key Uncertainties"):
         text_parts.append(f"Key Uncertainties section: {key_unc}")
     if thesis := sections.get("Investment Thesis"):

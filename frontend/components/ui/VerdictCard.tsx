@@ -54,7 +54,7 @@ export function DotGauge({
   return (
     <div
       role="img"
-      aria-label={`Confidence ${pct} out of 100${penaltyPct > 0 ? `, ${penaltyPct} points withheld for data gaps` : ""}`}
+      aria-label={`Confidence ${pct} out of 100${penaltyPct > 0 ? `, ${penaltyPct} points taken off because some data was missing` : ""}`}
       className="grid w-max grid-cols-10 gap-[5px]"
     >
       {Array.from({ length: 100 }).map((_, i) => (
@@ -103,7 +103,7 @@ export function VerdictCard({ layers, signal, ticker, confidencePenalty = 0 }: V
               <p className="font-serif text-3xl font-semibold leading-none">{confidencePct}</p>
               <p className="mt-1 max-w-[14rem] text-sm text-muted">
                 confidence, out of 100
-                {penaltyPct > 0 && `. Dashed dots are ${penaltyPct} points withheld for data gaps.`}
+                {penaltyPct > 0 && `. The dashed dots are ${penaltyPct} points taken off because some data was missing.`}
               </p>
             </div>
           </div>
@@ -132,7 +132,7 @@ export function VerdictCard({ layers, signal, ticker, confidencePenalty = 0 }: V
       </section>
 
       <section className="mt-12 border-y-[3px] border-double border-ink py-7">
-        <h2 className="text-xl font-semibold">Where this could be wrong</h2>
+        <h2 className="text-xl font-semibold">Watch out for</h2>
         <p className="mt-2 max-w-3xl font-serif text-[1.35rem] leading-[1.35]">{noEmDash(layers.key_uncertainty)}</p>
       </section>
     </article>
