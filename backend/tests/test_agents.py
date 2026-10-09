@@ -10,6 +10,7 @@ The end-to-end variant with real providers + real Anthropic lives in
 """
 from __future__ import annotations
 
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
@@ -120,7 +121,7 @@ def _fake_tavily() -> dict:
                 "headline": "NVDA smashes Q1 earnings expectations",
                 "source": "reuters",
                 "url": "https://reuters.com/a",
-                "published": "2026-04-18",
+                "published": (date.today() - timedelta(days=2)).isoformat(),
                 "score": 0.91,
                 "snippet": "NVDA data-center revenue beat consensus by 12%.",
             }

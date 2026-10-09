@@ -152,8 +152,11 @@ class TestAmdRegressionReport:
         assert sections == {}
 
     def test_well_formed_format_produces_all_sections(self):
+        # The fixture is a legacy 8-section report; the parser keeps every heading it finds,
+        # and the three current headings must all be among them.
         sections = _parse_rationale_sections(AMD_WELL_FORMED_RATIONALE)
-        assert len(sections) == len(SECTION_HEADINGS)
+        assert len(sections) == 8
+        assert set(SECTION_HEADINGS).issubset(sections.keys())
 
     def test_valuation_mentions_price_without_fragment(self):
         """$347.81 should appear intact in the Valuation Bridge section,
@@ -190,10 +193,5 @@ class TestAmdRegressionReport:
         """Guard: if someone renames a section, the constant must be updated too."""
         assert "Recommendation" in SECTION_HEADINGS
         assert "Investment Thesis" in SECTION_HEADINGS
-        assert "Top Signals" in SECTION_HEADINGS
-        assert "Valuation Bridge" in SECTION_HEADINGS
-        assert "Key Uncertainties" in SECTION_HEADINGS
         assert "Devil's Advocate" in SECTION_HEADINGS
-        assert "Data Quality" in SECTION_HEADINGS
-        assert "Final Rationale" in SECTION_HEADINGS
-        assert len(SECTION_HEADINGS) == 8
+        assert len(SECTION_HEADINGS) == 3
