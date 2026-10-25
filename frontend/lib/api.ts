@@ -12,6 +12,21 @@ export class ApiError extends Error {
   }
 }
 
+async function errorDetail(res: Response): Promise<string> {
+  try {
+    const body = (await res.json()) as { detail?: string | { msg?: string }[] };
+    if (typeof body.detail === "string") return body.detail;
+    if (Array.isArray(body.detail)) {
+      // FastAPI 422s return a list of validation errors.
+      const msgs = body.detail.map((d) => d.msg).filter(Boolean);
+      if (msgs.length) return msgs.join("; ");
+    }
+  } catch {
+    // ignore parse error, keep statusText
+  }
+  return res.statusText;
+}
+
 async function request<T>(
   path: string,
   getToken: () => Promise<string | null>,
@@ -27,16 +42,7 @@ async function request<T>(
     },
   });
 
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = (await res.json()) as { detail?: string };
-      if (body.detail) detail = body.detail;
-    } catch {
-      // ignore parse error, keep statusText
-    }
-    throw new ApiError(res.status, detail);
-  }
+  if (!res.ok) throw new ApiError(res.status, await errorDetail(res));
 
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
@@ -71,16 +77,7 @@ export async function getSupplyChain(
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
   });
-  if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = (await res.json()) as { detail?: string };
-      if (body.detail) detail = body.detail;
-    } catch {
-      // ignore
-    }
-    throw new ApiError(res.status, detail);
-  }
+  if (!res.ok) throw new ApiError(res.status, await errorDetail(res));
   return res.json() as Promise<SupplyChainReport>;
 }
 

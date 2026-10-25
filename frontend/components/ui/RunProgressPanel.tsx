@@ -3,50 +3,41 @@
 import { useEffect } from "react";
 import { useRun } from "@/hooks/useRuns";
 import { useRunStream } from "@/hooks/useRunStream";
-import type { RunStatusOut } from "@/lib/types";
+import { computeStages, friendlyRunError, stagesForFlow, type StageState } from "@/lib/runStages";
+import type { AgentRunFlow, RunStatusOut } from "@/lib/types";
+import { ButtonLink } from "./Button";
 import { Spinner } from "./Spinner";
 
 interface RunProgressPanelProps {
   runId: string;
+  flow?: AgentRunFlow;
   onComplete?: (run: RunStatusOut) => void;
 }
 
-type StepStatus = "running" | "done" | "failed" | "pending";
-
-const dotClass: Record<StepStatus, string> = {
-  running: "bg-action animate-pulse",
+const dotClass: Record<StageState, string> = {
   done: "bg-buy",
+  active: "bg-action motion-safe:animate-pulse",
   failed: "bg-sell",
-  pending: "bg-rule",
+  pending: "border-2 border-rule bg-paper",
 };
 
-function StepAccounting({
-  step,
-}: {
-  step: {
-    llm_model: string | null;
-    input_tokens: number | null;
-    output_tokens: number | null;
-    latency_ms: number | null;
-    estimated_cost_usd: number | null;
-  };
-}) {
-  const parts = [
-    step.llm_model,
-    step.latency_ms !== null ? `${(step.latency_ms / 1000).toFixed(1)}s` : null,
-    step.input_tokens !== null || step.output_tokens !== null
-      ? `${step.input_tokens ?? 0} in / ${step.output_tokens ?? 0} out`
-      : null,
-    step.estimated_cost_usd !== null ? `$${step.estimated_cost_usd.toFixed(4)}` : null,
-  ].filter(Boolean);
+const stateLabel: Record<StageState, string> = {
+  done: "Completed",
+  active: "In progress",
+  failed: "Stopped",
+  pending: "Up next",
+};
 
-  if (parts.length === 0) return null;
-  return <p className="mt-0.5 text-sm tabular-nums text-muted">{parts.join(" · ")}</p>;
-}
-
-export function RunProgressPanel({ runId, onComplete }: RunProgressPanelProps) {
+export function RunProgressPanel({ runId, flow, onComplete }: RunProgressPanelProps) {
   const { steps, streamStatus, error: streamError, isStreaming } = useRunStream(runId);
   const { data: run } = useRun(runId);
+
+  const isComplete = streamStatus === "complete" || run?.status === "complete";
+  const isFailed =
+    !!streamError ||
+    streamStatus === "failed" ||
+    streamStatus === "timeout" ||
+    run?.status === "failed";
 
   useEffect(() => {
     if (streamStatus === "complete" && run && run.status === "complete") {
@@ -54,68 +45,78 @@ export function RunProgressPanel({ runId, onComplete }: RunProgressPanelProps) {
     }
   }, [streamStatus, run, onComplete]);
 
-  const headerLabel = isStreaming
-    ? "Running agents"
-    : streamStatus === "complete"
-      ? "Run complete"
-      : streamStatus === "failed" || streamStatus === "timeout"
-        ? "Run failed"
-        : "Waiting to start";
+  const stages = stagesForFlow(flow ?? run?.flow);
+  const { views, completedCount } = computeStages(stages, steps, {
+    isStreaming,
+    failed: isFailed,
+    complete: isComplete,
+  });
+  const total = views.length;
+  const currentStep = Math.min(completedCount + 1, total);
+
+  const heading = isFailed
+    ? "We couldn't finish this report"
+    : isComplete
+      ? "Your report is ready"
+      : run?.ticker
+        ? `Researching ${run.ticker}`
+        : "Getting started";
 
   return (
     <div>
       <div className="mb-6 flex items-center gap-3">
-        {isStreaming && <Spinner size="sm" />}
-        <h2 className="text-xl font-semibold text-ink">{headerLabel}</h2>
+        {!isFailed && !isComplete && <Spinner size="sm" />}
+        <h2 className="text-xl font-semibold text-ink">{heading}</h2>
       </div>
 
-      {streamError && (
-        <div role="alert" className="mb-6 rounded-lg border border-sell/40 bg-sell-soft px-5 py-4">
-          <p className="font-medium text-sell">Run failed</p>
-          <p className="mt-0.5 text-sm text-sell/90">
-            {streamError.startsWith("LookupError")
-              ? "Could not find this ticker in market data sources. Check the symbol and try again."
-              : streamError.startsWith("ValueError") || streamError.startsWith("KeyError")
-                ? "Unexpected data format from a market data provider. Try again shortly."
-                : "The analysis run failed. Start a new run to try again."}
-          </p>
+      {isFailed ? (
+        <div role="alert" className="mb-8 rounded-lg border border-sell/40 bg-sell-soft px-5 py-4">
+          <p className="text-sm text-sell">{friendlyRunError(streamError ?? run?.error ?? null)}</p>
+          <div className="mt-4">
+            <ButtonLink href={flow === "portfolio" ? "/portfolios" : "/research"}>
+              {flow === "portfolio" ? "Back to portfolios" : "Start a new research"}
+            </ButtonLink>
+          </div>
         </div>
-      )}
-
-      {/* The agents run in order, so a timeline is the right structure here. */}
-      <ol className="relative ml-1.5 border-l border-rule">
-        {steps.map((step, idx) => {
-          const isLast = idx === steps.length - 1;
-          const status: StepStatus = step.error
-            ? "failed"
-            : step.completed_at
-              ? "done"
-              : isStreaming && isLast
-                ? "running"
-                : "pending";
-          return (
-            <li key={step.id} className="relative pb-6 pl-6 last:pb-0">
-              <span
-                className={`absolute -left-[5px] top-2 h-2.5 w-2.5 rounded-full ring-4 ring-paper ${dotClass[status]}`}
+      ) : (
+        total > 1 && (
+          <div className="mb-8">
+            <p className="text-sm text-muted" aria-live="polite">
+              {isComplete ? "All steps complete" : `Step ${currentStep} of ${total}`}
+            </p>
+            <div className="mt-2 h-1 w-full bg-rule" aria-hidden="true">
+              <div
+                className="h-full bg-action motion-safe:transition-[width] motion-safe:duration-500"
+                style={{ width: `${(completedCount / total) * 100}%` }}
               />
-              <div className="flex items-baseline justify-between gap-4">
-                <p className="text-base font-medium text-ink">{step.agent_name.replace(/_/g, " ")}</p>
-                {step.completed_at && (
-                  <span className="text-sm tabular-nums text-muted">
-                    {new Date(step.completed_at).toLocaleTimeString()}
-                  </span>
-                )}
-              </div>
-              {step.error && <p className="mt-0.5 text-sm text-sell">{step.error}</p>}
-              <StepAccounting step={step} />
-            </li>
-          );
-        })}
-      </ol>
-
-      {steps.length === 0 && !isStreaming && !streamError && (
-        <p className="text-base text-muted">No agents have started yet.</p>
+            </div>
+          </div>
+        )
       )}
+
+      {/* The stages are fixed and ordered, so a timeline is the right structure. */}
+      <ol className="relative ml-1.5 border-l border-rule">
+        {views.map(({ stage, state }) => (
+          <li
+            key={stage.key}
+            className="relative pb-6 pl-6 last:pb-0"
+            aria-current={state === "active" ? "step" : undefined}
+          >
+            <span
+              className={`absolute -left-[6px] top-2 h-3 w-3 rounded-full ring-4 ring-paper ${dotClass[state]}`}
+            />
+            <p
+              className={`text-base ${
+                state === "pending" ? "text-muted" : state === "active" ? "font-semibold text-ink" : "font-medium text-ink"
+              }`}
+            >
+              {stage.label}
+              <span className="sr-only">{`: ${stateLabel[state]}`}</span>
+            </p>
+            {state === "active" && <p className="mt-0.5 text-sm text-muted">{stage.description}</p>}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

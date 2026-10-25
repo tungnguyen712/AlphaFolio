@@ -20,11 +20,11 @@ export default function ResearchRunPage({ params }: { params: { id: string } }) 
     <div>
       <PageHeader
         title="Research in progress"
-        description="You'll be taken to the result as soon as the last agent finishes."
+        description="This usually takes two to three minutes. You'll be taken to the result when it's ready."
       />
 
       <div className="max-w-form">
-        <RunProgressPanel runId={params.id} onComplete={handleComplete} />
+        <RunProgressPanel runId={params.id} flow="research" onComplete={handleComplete} />
       </div>
     </div>
   );

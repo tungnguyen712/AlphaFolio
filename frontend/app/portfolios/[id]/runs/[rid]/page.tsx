@@ -99,7 +99,7 @@ export default function PortfolioRunPage({
   return (
     <div>
       <h3 className="mb-4 text-xl font-semibold text-ink">Portfolio analysis in progress</h3>
-      <RunProgressPanel runId={params.rid} />
+      <RunProgressPanel runId={params.rid} flow="portfolio" />
     </div>
   );
 }
