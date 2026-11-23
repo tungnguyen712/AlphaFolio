@@ -148,15 +148,6 @@ def run_portfolio_task(self, run_id: str) -> str:  # type: ignore[override]
     return run_id
 
 
-# TEMPORARY: Sentry worker verification task. Remove after confirming the event
-# shows up in Sentry. Trigger with:
-#   docker compose exec backend python -c \
-#     "from app.workers.tasks import sentry_debug_task; sentry_debug_task.delay()"
-@celery_app.task(name="debug.sentry_error")
-def sentry_debug_task() -> None:
-    raise RuntimeError("Sentry worker test error (temporary debug.sentry_error task)")
-
-
 @celery_app.task(name="maintenance.evaluate_triggers")
 def evaluate_triggers_task() -> int:
     """Fire due triggers and create user notifications + Telegram pushes.

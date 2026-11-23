@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
@@ -55,14 +55,6 @@ def create_app() -> FastAPI:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
         return {"status": "ok", "env": settings.app_env}
-
-    # TEMPORARY: Sentry API verification route. Remove after confirming the event
-    # shows up in Sentry. Hidden (404) in production.
-    @app.get("/sentry-debug", include_in_schema=False)
-    async def sentry_debug() -> None:
-        if settings.app_env == "production":
-            raise HTTPException(status_code=404, detail="Not Found")
-        raise RuntimeError("Sentry API test error (temporary /sentry-debug route)")
 
     return app
 
