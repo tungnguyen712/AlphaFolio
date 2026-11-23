@@ -9,9 +9,13 @@ from app.auth.clerk import require_auth_configured_or_dev_bypass
 from app.config import get_settings
 from app.db.session import engine
 from app.logging import RequestLoggingMiddleware, configure_logging
+from app.observability import init_sentry
 
 
 configure_logging()
+# API process only. Must run before create_app() so the FastAPI integration can
+# patch Starlette. The worker inits Sentry separately via celeryd_init.
+init_sentry()
 
 
 @asynccontextmanager

@@ -29,6 +29,7 @@ dependencies = [
     "yahooquery>=2.3",
     "numpy>=1.26",
     "scipy>=1.13",
+    "sentry-sdk>=2.75.0",
 ]
 
 [project.optional-dependencies]

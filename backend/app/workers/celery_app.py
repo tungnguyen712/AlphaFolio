@@ -7,6 +7,7 @@ from celery import Celery, signals
 
 from app.config import get_settings
 from app.logging import configure_logging
+from app.observability import init_sentry
 
 configure_logging()
 settings = get_settings()
@@ -39,6 +40,13 @@ celery_app.conf.update(
         },
     },
 )
+
+
+@signals.celeryd_init.connect
+def _init_sentry_in_worker(**_: Any) -> None:
+    # Fires only in `celery worker` processes, never when the API imports this
+    # module. That is why Sentry is not initialised at module level here.
+    init_sentry()
 
 
 @signals.task_prerun.connect
