@@ -29,6 +29,7 @@ dependencies = [
     "yahooquery>=2.3",
     "numpy>=1.26",
     "scipy>=1.13",
+    "sentry-sdk>=2.75.0,<3",  # 3.x removed send_default_pii/include_prompts; prompt capture needs data_collection instead
 ]
 
 [project.optional-dependencies]

@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     langchain_api_key: str = ""
     langchain_project: str = "alphafolio-dev"
 
+    # Sentry error tracking + tracing. Empty DSN disables Sentry entirely (init is a no-op).
+    sentry_dsn: str = ""
+    sentry_traces_sample_rate: float = Field(default=1.0, ge=0.0, le=1.0)
+
     telegram_bot_token: str | None = None
     telegram_bot_username: str = "AlphaFolioBot"
     telegram_webhook_secret: str = "changeme-in-production"
